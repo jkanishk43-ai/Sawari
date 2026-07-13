@@ -1,0 +1,130 @@
+{
+  "name": "sawaari-cache-rules",
+  "description": "Cache rules for optimal performance of transit data and API responses",
+  "cache_rules": [
+    {
+      "name": "cache-map-tiles",
+      "match": {
+        "url_pattern": "*.mvt",
+        "or": ["url_pattern", "*.pbf", "*tile*.png", "*tile*.jpg"]
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 86400,
+        "edge_ttl": 86400,
+        "browser_ttl": 3600,
+        "stale_while_revalidate": 3600,
+        "serve_stale_if_error": true
+      },
+      "description": "Cache vector map tiles (MVT/PBF) for 24 hours"
+    },
+    {
+      "name": "cache-gtfs-static",
+      "match": {
+        "url_pattern": "*/gtfs/*",
+        "or": ["url_pattern", "*.zip", "*gtfs*.json"]
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 86400,
+        "edge_ttl": 86400,
+        "browser_ttl": 0,
+        "stale_while_revalidate": 3600
+      },
+      "description": "Cache static GTFS data for 24 hours"
+    },
+    {
+      "name": "cache-gtfs-rt",
+      "match": {
+        "url_pattern": "*/gtfs-rt/*",
+        "or": ["url_pattern", "*VehiclePositions*", "*TripUpdates*"]
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 10,
+        "edge_ttl": 10,
+        "browser_ttl": 0,
+        "stale_while_revalidate": 5,
+        "origin_error_only": false
+      },
+      "description": "Cache real-time GTFS data for 10 seconds"
+    },
+    {
+      "name": "cache-fare-tables",
+      "match": {
+        "url_pattern": "*/v1/fares/*"
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 3600,
+        "edge_ttl": 3600,
+        "browser_ttl": 3600,
+        "stale_while_revalidate": 600
+      },
+      "description": "Cache fare tables for 1 hour"
+    },
+    {
+      "name": "cache-stop-data",
+      "match": {
+        "url_pattern": "*/v1/stops/*"
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 3600,
+        "edge_ttl": 3600,
+        "browser_ttl": 600,
+        "stale_while_revalidate": 300
+      },
+      "description": "Cache stop/station data for 1 hour"
+    },
+    {
+      "name": "cache-ticket-pdfs",
+      "match": {
+        "url_pattern": "*/tickets/*.pdf"
+      },
+      "settings": {
+        "cache": false,
+        "bypass_cache_on_cookie": "session.*"
+      },
+      "description": "Never cache ticket PDFs (sensitive)"
+    },
+    {
+      "name": "cache-static-assets",
+      "match": {
+        "url_pattern": "*.{js,css,png,jpg,jpeg,gif,svg,ico,woff,woff2}"
+      },
+      "settings": {
+        "cache": true,
+        "ttl": 31536000,
+        "edge_ttl": 31536000,
+        "browser_ttl": 86400,
+        "respect_strong_etag": true
+      },
+      "description": "Cache static assets for 1 year (immutable)"
+    },
+    {
+      "name": "no-cache-api-writes",
+      "match": {
+        "url_pattern": "*/v1/*",
+        "request_methods": ["POST", "PUT", "DELETE", "PATCH"]
+      },
+      "settings": {
+        "cache": false
+      },
+      "description": "Never cache write operations"
+    }
+  ],
+  "origin_cache_control": {
+    "respect_origin_headers": true,
+    "default_ttl": 300
+  },
+  "purge_config": {
+    "purge_urls_on_deploy": true,
+    "auto_purge_on_gtfs_update": true,
+    "purge_patterns": [
+      "*/gtfs/*",
+      "*/v1/fares/*",
+      "*/v1/stops/*"
+    ]
+  }
+}

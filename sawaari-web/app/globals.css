@@ -1,0 +1,256 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   Sawaari Brand Styles
+   ============================================ */
+
+@layer base {
+  :root {
+    /* Pine Green Palette */
+    --pine-dark: #073020;
+    --pine-mid: #0B3D29;
+    --pine-light: #EFF6F3;
+    --pine-accent: #124C38;
+
+    /* Surface Colors */
+    --paper-white: #FBFAF7;
+    --paper-grid: #E8E5DB;
+
+    /* Text Colors */
+    --charcoal: #1A1A1A;
+    --ink-dim: #555E5A;
+
+    /* Accent Colors */
+    --accent-green: #10B981;
+    --accent-yellow: #F59E0B;
+    --accent-red: #EF4444;
+    --accent-blue: #3B82F6;
+    --accent-purple: #8B5CF6;
+
+    /* Fonts */
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-display: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--paper-white);
+    color: var(--charcoal);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ============================================
+   Component Classes
+   ============================================ */
+
+@layer components {
+  /* Card Base */
+  .card {
+    @apply bg-white rounded-2xl border border-pine-dark/5 shadow-card;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .card-hover:hover {
+    box-shadow: 0 8px 30px rgba(7, 48, 32, 0.12);
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold;
+  }
+
+  .badge-green {
+    @apply bg-accent-green/10 text-accent-green;
+  }
+
+  .badge-purple {
+    @apply bg-accent-purple/10 text-accent-purple;
+  }
+
+  .badge-blue {
+    @apply bg-accent-blue/10 text-accent-blue;
+  }
+
+  .badge-yellow {
+    @apply bg-accent-yellow/10 text-accent-yellow;
+  }
+
+  /* Button */
+  .btn-primary {
+    @apply w-full bg-pine-dark text-paper-white font-semibold py-3 px-6 rounded-xl;
+    transition: opacity 0.2s ease;
+  }
+
+  .btn-primary:hover {
+    opacity: 0.9;
+  }
+
+  .btn-outline {
+    @apply w-full border-2 border-pine-dark text-pine-dark font-semibold py-3 px-6 rounded-xl;
+    transition: all 0.2s ease;
+  }
+
+  .btn-outline:hover {
+    @apply bg-pine-dark text-paper-white;
+  }
+
+  /* Input */
+  .input-field {
+    @apply w-full px-4 py-3 bg-white rounded-xl border border-gray-200;
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-field:focus {
+    @apply outline-none border-pine-dark;
+    box-shadow: 0 0 0 3px rgba(7, 48, 32, 0.1);
+  }
+
+  /* Provider Icon Container */
+  .provider-icon {
+    @apply flex items-center justify-center rounded-xl;
+  }
+
+  /* Section Header */
+  .section-header {
+    @apply flex items-center justify-between mb-4;
+  }
+
+  .section-title {
+    @apply font-display font-semibold text-charcoal text-lg;
+  }
+
+  /* Route Line */
+  .route-dot {
+    @apply w-3 h-3 rounded-full border-2 border-white flex-shrink-0;
+  }
+
+  .route-line {
+    @apply w-0.5 flex-shrink-0;
+  }
+
+  /* Toggle Switch */
+  .toggle-track {
+    @apply relative w-11 h-6 bg-gray-200 rounded-full transition-colors;
+  }
+
+  .toggle-thumb {
+    @apply absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform;
+  }
+
+  /* Autocomplete List */
+  .autocomplete-list {
+    @apply absolute z-50 w-full mt-1 bg-white rounded-xl border border-gray-200 shadow-lg overflow-hidden;
+  }
+
+  .autocomplete-item {
+    @apply px-4 py-3 cursor-pointer transition-colors;
+  }
+
+  .autocomplete-item:hover,
+  .autocomplete-item:focus {
+    @apply bg-pine-light;
+  }
+}
+
+/* ============================================
+   Utility Styles
+   ============================================ */
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .glass {
+    background: rgba(251, 250, 247, 0.85);
+    backdrop-filter: blur(8px);
+  }
+}
+
+/* ============================================
+   Animations
+   ============================================ */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-green {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out;
+}
+
+.animate-pulse-green {
+  animation: pulse-green 2s infinite;
+}
+
+/* ============================================
+   PWA Install Prompt
+   ============================================ */
+
+.pwa-banner {
+  @apply fixed bottom-0 left-0 right-0 z-50 p-4 glass border-t border-pine-dark/10;
+}
+
+/* ============================================
+   Print Styles
+   ============================================ */
+
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}

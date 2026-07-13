@@ -1,0 +1,98 @@
+# ClickHouse Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  namespace: sawaari
+  labels:
+    app: clickhouse
+    tier: analytics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+        tier: analytics
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.5
+          ports:
+            - containerPort: 8123
+              name: http
+            - containerPort: 9000
+              name: native
+          env:
+            - name: CLICKHOUSE_DB
+              value: sawaari
+            - name: CLICKHOUSE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-secrets
+                  key: clickhouse-user
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-secrets
+                  key: clickhouse-password
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+          livenessProbe:
+            exec:
+              command: ["clickhouse-client", "--query", "SELECT 1"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["clickhouse-client", "--query", "SELECT 1"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: clickhouse-data
+          persistentVolumeClaim:
+            claimName: clickhouse-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: sawaari
+  labels:
+    app: clickhouse
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8123
+      targetPort: 8123
+      protocol: TCP
+    - name: native
+      port: 9000
+      targetPort: 9000
+      protocol: TCP
+  selector:
+    app: clickhouse
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clickhouse-pvc
+  namespace: sawaari
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi

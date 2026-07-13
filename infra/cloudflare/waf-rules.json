@@ -1,0 +1,77 @@
+{
+  "name": "sawaari-waf-rules",
+  "description": "WAF rules for Sawaari API and web properties",
+  "rules": [
+    {
+      "name": "block-known-attackers",
+      "expression": "(cf.threatScore > 30) or (ip.geoip.country eq \"XX\")",
+      "action": "block",
+      "status": "enabled",
+      "description": "Block requests from known threat actors and suspicious geographies"
+    },
+    {
+      "name": "sql-injection-protection",
+      "expression": "(lookup_json_string(cf.request.headers, \"user-agent\") contains \"sqlmap\") or (any(lower(http.request.uri) contains \"union select\", \"union+select\", \"1=1\", \"' or '1'='1\"))",
+      "action": "block",
+      "status": "enabled",
+      "description": "Protect against SQL injection attempts"
+    },
+    {
+      "name": "xss-protection",
+      "expression": "any(lower(http.request.uri) contains \"<script\", \"javascript:\", \"onerror=\", \"onload=\")",
+      "action": "block",
+      "status": "enabled",
+      "description": "Block common XSS attack patterns"
+    },
+    {
+      "name": "rate-limit-api",
+      "expression": "(http.request.uri.path startsWith \"/v1/\") and (http.request.method ne \"OPTIONS\")",
+      "action": "challenge",
+      "status": "enabled",
+      "ratelimit": {
+        "requests_per_period": 100,
+        "period": 60
+      },
+      "description": "Rate limit API endpoints"
+    },
+    {
+      "name": "protect-admin-endpoints",
+      "expression": "(http.request.uri.path contains \"/admin/\") or (http.request.uri.path contains \"/internal/\")",
+      "action": "managed_challenge",
+      "status": "enabled",
+      "description": "Require challenge for admin/internal endpoints"
+    },
+    {
+      "name": "allow-health-checks",
+      "expression": "(http.request.uri.path contains \"/health\") or (http.request.uri.path contains \"/ready\")",
+      "action": "allow",
+      "status": "enabled",
+      "description": "Allow health check endpoints without challenges"
+    },
+    {
+      "name": "bot-management",
+      "expression": "(cf.bot_management.verified_bot) or (cf.bot_management.score > 30)",
+      "action": "allow",
+      "status": "enabled",
+      "description": "Allow verified bots and high-scored requests"
+    },
+    {
+      "name": "ddos-protection",
+      "expression": "(cf.threatScore > 50) and (not cf.bot_management.verified_bot)",
+      "action": "block",
+      "status": "enabled",
+      "description": "Block high-threat requests not from verified bots"
+    }
+  ],
+  "sensitivity_levels": {
+    "sql-injection-protection": "high",
+    "xss-protection": "high",
+    "rate-limit-api": "medium",
+    "ddos-protection": "high"
+  },
+  "bypass_rules": {
+    "always": [
+      "http.request.uri.path contains \"/.well-known/security.txt\""
+    ]
+  }
+}

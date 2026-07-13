@@ -1,0 +1,606 @@
+version: "3.9"
+
+# Sawaari - Full Stack Docker Compose
+# Multi-modal transit fare comparison & booking platform for Delhi NCR
+
+services:
+  # ============================================
+  # DATABASE LAYER
+  # ============================================
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: sawaari-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sawaari
+      POSTGRES_USER: ${POSTGRES_USER:-sawaari}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sawaari_secure_pass}
+      POSTGRES_MAX_CONNECTIONS: 200
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sawaari} -d sawaari"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ============================================
+  # CACHE LAYER
+  # ============================================
+
+  valkey:
+    image: valkey/valkey:8.0
+    container_name: sawaari-valkey
+    restart: unless-stopped
+    command: >
+      valkey-server
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    volumes:
+      - valkey_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================
+  # EVENT BUS
+  # ============================================
+
+  kafka:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: sawaari-kafka
+    restart: unless-stopped
+    depends_on:
+      - zookeeper
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      # Topics are created by the kafka-init service
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.7.0
+    container_name: sawaari-zookeeper
+    restart: unless-stopped
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # ============================================
+  # ANALYTICS
+  # ============================================
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.5
+    container_name: sawaari-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: sawaari
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-sawaari}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse_secure_pass}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./infra/clickhouse:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "8123:8123"  # HTTP interface
+      - "9000:9000"  # Native client
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # ============================================
+  # OBJECT STORAGE (MinIO / S3 Compatible)
+  # ============================================
+
+  minio:
+    image: minio/minio:RELEASE.2024-07-16T23-46-41Z
+    container_name: sawaari-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin_secure}
+      MINIO_DEFAULT_BUCKETS: sawaari-tickets,sawaari-gtfs,sawaari-qr,public
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # API
+      - "9001:9001"   # Console
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ============================================
+  # API GATEWAY
+  # ============================================
+
+  kong:
+    image: kong:3.6
+    container_name: sawaari-kong
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_PORT: 5432
+      KONG_PG_USER: ${POSTGRES_USER:-sawaari}
+      KONG_PG_PASSWORD: ${POSTGRES_PASSWORD:-sawaari_secure_pass}
+      KONG_PG_DB: kong
+      KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+    volumes:
+      - ./infra/kong/kong.yml:/usr/local/kong/kong.yml:ro
+    ports:
+      - "8000:8000"   # Proxy HTTP
+      - "8443:8443"   # Proxy HTTPS
+      - "8001:8001"   # Admin HTTP
+      - "8444:8444"   # Admin HTTPS
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================
+  # CORE SERVICES
+  # ============================================
+
+  sawaari-backend:
+    build:
+      context: ./sawaari-backend
+      dockerfile: Dockerfile
+    container_name: sawaari-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      # Server
+      PORT: 8080
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      # Database
+      DATABASE_URL: postgres://${POSTGRES_USER:-sawaari}:${POSTGRES_PASSWORD:-sawaari_secure_pass}@postgres:5432/sawaari?sslmode=disable
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-sawaari}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sawaari_secure_pass}
+      POSTGRES_DB: sawaari
+
+      # Redis/Valkey
+      REDIS_URL: redis://valkey:6379/0
+      REDIS_PASSWORD: ""
+
+      # Kafka
+      KAFKA_BROKERS: kafka:9092
+
+      # ClickHouse
+      CLICKHOUSE_URL: http://${CLICKHOUSE_USER:-sawaari}:${CLICKHOUSE_PASSWORD:-clickhouse_secure_pass}@clickhouse:8123
+
+      # MinIO / S3
+      S3_ENDPOINT: http://minio:9000
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin_secure}
+      S3_BUCKET_TICKETS: sawaari-tickets
+      S3_BUCKET_GTFS: sawaari-gtfs
+      S3_REGION: us-east-1
+
+      # External APIs
+      UBER_CLIENT_ID: ${UBER_CLIENT_ID:-}
+      UBER_CLIENT_SECRET: ${UBER_CLIENT_SECRET:-}
+      ULA_API_KEY: ${OLA_API_KEY:-}
+      RAPIDO_API_KEY: ${RAPIDO_API_KEY:-}
+
+      # OTP2
+      OTP2_URL: http://otp2:8080
+
+      # Valhalla
+      VALHALLA_URL: http://valhalla:8002
+
+      # Geocoding
+      PHOTON_URL: http://photon:2322
+
+      # ONDC
+      ONDC_GATEWAY_URL: ${ONDC_GATEWAY_URL:-}
+      ONDC_SUBSCRIBER_ID: ${ONDC_SUBSCRIBER_ID:-}
+      ONDC_SUBSCRIBER_KEY: ${ONDC_SUBSCRIBER_KEY:-}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  # ============================================
+  # OTP2 - OpenTripPlanner (Transit Routing)
+  # ============================================
+
+  otp2:
+    build:
+      context: ./sawaari-backend
+      dockerfile: Dockerfile.otp2
+    container_name: sawaari-otp2
+    restart: unless-stopped
+    depends_on:
+      - minio  # For graph build artifacts
+    environment:
+      OTP2_PORT: 8080
+      OTP2_GRAPH_DIR: /var/otp/graphs
+      JAVA_OPTS: >-
+        -Xmx6g
+        -Xms2g
+        -server
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=500
+    volumes:
+      - otp2_graphs:/var/otp/graphs
+      - ./infra/gtfs:/gtfs:ro
+    ports:
+      - "8081:8080"  # OTP2 Web UI + API
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/otp/"
+      interval: 60s
+      timeout: 30s
+      retries: 3
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: 2
+
+  # ============================================
+  # VALHALLA - Road Routing Engine
+  # ============================================
+
+  valhalla:
+    build:
+      context: ./sawaari-backend
+      dockerfile: Dockerfile.valhalla
+    container_name: sawaari-valhalla
+    restart: unless-stopped
+    environment:
+      SERVICE_PORT: 8002
+      JVM_ARGS: -Xmx2g
+      BINDING: 0.0.0.0
+    volumes:
+      - valhalla_data:/valhalla/data
+    ports:
+      - "8002:8002"  # Valhalla HTTP API
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  # ============================================
+  # PHOTON - Geocoding Service
+  # ============================================
+
+  photon:
+    image: geopython/photon:0.4.1
+    container_name: sawaari-photon
+    restart: unless-stopped
+    environment:
+      PHOTON_OSM_TILE_PATH: /data
+      JVM_ARGS: -Xmx2g
+    volumes:
+      - photon_data:/data
+      - ./infra/photon/delhi_gazetteer.json:/opt/photon/gazetteer.json:ro
+    ports:
+      - "2322:2322"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2322/api?q=test"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+
+  # ============================================
+  # BFF - GraphQL/REST Backend for Frontend
+  # ============================================
+
+  sawaari-bff:
+    image: node:20-alpine
+    container_name: sawaari-bff
+    restart: unless-stopped
+    working_dir: /app
+    command: tail -f /dev/null  # Placeholder - actual BFF would be built
+    environment:
+      NODE_ENV: ${ENVIRONMENT:-development}
+      PORT: 4000
+      BACKEND_URL: http://sawaari-backend:8080
+      KONG_URL: http://kong:8000
+    ports:
+      - "4000:4000"
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================
+  # GTFS-REALTIME CONSUMER
+  # ============================================
+
+  gtfs-realtime-consumer:
+    image: confluentinc/kafka-tutorials:7.7.0-gtfs
+    container_name: sawaari-gtfs-rt
+    restart: unless-stopped
+    depends_on:
+      - kafka
+      - valkey
+    environment:
+      KAFKA_BROKER: kafka:9092
+      GTFS_TOPIC: bus.positions
+      REDIS_URL: redis://valkey:6379/1
+      OTD_API_KEY: ${OTD_API_KEY:-}
+      OTD_BASE_URL: https://otd.delhi.gov.in/api
+    volumes:
+      - ./infra/gtfs-realtime:/app:ro
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================
+  # GTFS PIPELINE SCRIPTS
+  # ============================================
+
+  gtfs-fetcher:
+    image: alpine:3.19
+    container_name: sawaari-gtfs-fetcher
+    restart: unless-stopped
+    command: >
+      sh -c "apk add --no-cache curl unzip bash jq tzdata &&
+             ln -snf /usr/share/zoneinfo/Asia/Kolkata /etc/localtime &&
+             echo 'Asia/Kolkata' > /etc/timezone &&
+             while true; do
+               /scripts/fetch_gtfs.sh;
+               sleep 86400;
+             done"
+    volumes:
+      - ./data/gtfs:/gtfs
+      - ./scripts:/scripts
+    environment:
+      - OTD_API_KEY=${OTD_API_KEY:-}
+      - OTD_STATIC_URL=https://otd.delhi.gov.in/api/gtfs/static
+      - OTD_RT_URL=https://otd.delhi.gov.in/api/gtfs/realtime
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin_secure}
+    networks:
+      - sawaari-backend
+
+  # ============================================
+  # KAFKA INIT - Create topics
+  # ============================================
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.0
+    container_name: sawaari-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      # Wait for Kafka to be ready
+      echo 'Waiting for Kafka to be ready...'
+      cub kafka-ready -b kafka:9092 1 40
+
+      # Create topics
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bus.positions --replication-factor 1 --partitions 3
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic quotes.issued --replication-factor 1 --partitions 6
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic quotes.feedback --replication-factor 1 --partitions 6
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic bookings.state --replication-factor 1 --partitions 6
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic alerts.fired --replication-factor 1 --partitions 3
+      kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic tariffs.changed --replication-factor 1 --partitions 1
+
+      echo 'Topics created successfully!'
+      "
+    networks:
+      - sawaari-backend
+
+  # ============================================
+  # MONITORING
+  # ============================================
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: sawaari-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+      - "--storage.tsdb.wal-compression"
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/monitoring/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sawaari-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_FEATURE_TOGGLES_ENABLE=publicDashboards
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - sawaari-backend
+    networks:
+      - sawaari-backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # ============================================
+  # VOLUMES
+  # ===========================================
+
+volumes:
+  postgres_data:
+    driver: local
+  valkey_data:
+    driver: local
+  kafka_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  clickhouse_data:
+    driver: local
+  minio_data:
+    driver: local
+  otp2_graphs:
+    driver: local
+  valhalla_data:
+    driver: local
+  photon_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  sawaari-backend:
+    driver: bridge
+    name: sawaari-network

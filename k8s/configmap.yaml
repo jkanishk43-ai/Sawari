@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sawaari-backend-config
+  namespace: sawaari
+data:
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "production"
+  PORT: "8080"
+  KAFKA_BROKERS: "kafka.sawaari.svc.cluster.local:9092"
+  OTP2_URL: "http://otp2.sawaari.svc.cluster.local:8080"
+  VALHALLA_URL: "http://valhalla.sawaari.svc.cluster.local:8002"
+  PHOTON_URL: "http://photon.sawaari.svc.cluster.local:2322"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-config
+  namespace: sawaari
+data:
+  POSTGRES_DB: "sawaari"
+  POSTGRES_USER: "sawaari"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kafka-config
+  namespace: sawaari
+data:
+  KAFKA_TOPICS: |
+    bus.positions
+    quotes.issued
+    quotes.feedback
+    bookings.state
+    alerts.fired
+    tariffs.changed
+  KAFKA_NUM_PARTITIONS: "6"
+  KAFKA_REPLICATION_FACTOR: "1"

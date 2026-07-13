@@ -1,0 +1,192 @@
+# ============================================
+# Valhalla - Road Routing Engine with Delhi OSM
+# ============================================
+FROM ubuntu:24.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    curl \
+    git \
+    libboost-all-dev \
+    libboost-filesystem-dev \
+    libboost-graph-dev \
+    libboost-iostreams-dev \
+    libboost-program-options-dev \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libcurl4-openssl-dev \
+    libgeos-dev \
+    liblua5.3-dev \
+    libosmium2-dev \
+    libprotozero-dev \
+    libsqlite3-dev \
+    libtidy-dev \
+    libuv-dev \
+    libvips-dev \
+    libxz-dev \
+    libzip-dev \
+    lua5.3 \
+    pkg-config \
+    valgrind \
+    wget \
+    xz-utils \
+    zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Valhalla version
+ARG VALHALLA_VERSION=7.0.0
+
+# Build directory
+WORKDIR /build
+
+# Clone and build Valhalla
+RUN git clone --depth 1 --branch v${VALHALLA_VERSION} https://github.com/valhalla/valhalla.git && \
+    cd valhalla && \
+    mkdir build && \
+    cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DENABLE_BENCHMARKS=OFF \
+        -DENABLE_BENCHMARKS=OFF \
+        -DENABLE_CCACHE=ON \
+        -DENABLE_DATA_TOOLS=ON \
+        -DENABLE_SAMPLE=OFF \
+        -DENABLE_STATIC=ON \
+        -DENABLE_TOOLS=ON && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
+
+# ============================================
+# Runtime stage
+# ============================================
+FROM ubuntu:24.04 AS runtime
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    libboost-filesystem1.83.0 \
+    libboost-graph1.83.0 \
+    libboost-iostreams1.83.0 \
+    libboost-program-options1.83.0 \
+    libboost-system1.83.0 \
+    libboost-thread1.83.0 \
+    libcurl4 \
+    libgcc-s1 \
+    liblua5.3-0 \
+    libosmium2-2.20 \
+    libprotozero1 \
+    libsqlite3-0 \
+    libtidy5 \
+    libuv1 \
+    libvips42 \
+    libzip5 \
+    lua5.3 \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create Valhalla user
+RUN useradd -m -s /bin/bash valhalla
+
+# Create directories
+WORKDIR /valhalla
+RUN mkdir -p /valhalla/data /valhalla/conf /valhalla/logs
+RUN chown -R valhalla:valhalla /valhalla
+
+# Copy built binaries
+COPY --from=builder /usr/local/bin/valhalla* /usr/local/bin/
+COPY --from=builder /usr/local/lib/libvalhalla* /usr/local/lib/
+COPY --from=builder /usr/local/lib/libmjolnir* /usr/local/lib/
+RUN ldconfig
+
+# Copy sample config
+COPY <<'EOF' /valhalla/conf/valhalla.json
+{
+  "version": "1.0.0",
+  "tileset": "delhi",
+  "tile_dir": "/valhalla/data",
+  "service": {
+    "port": 8002,
+    "bind": "0.0.0.0",
+    "timeout": 30
+  },
+  "mjolnir": {
+    "admin": "/valhalla/data/admin.sqlite",
+    "timezone": "/valhalla/data/tz.sqlite",
+    "hierarchy": true,
+    "shortcut": true,
+    "traffic": false,
+    "data_processing": {
+      "max_merge_distance_meters": 1000,
+      "max_avoid_roundabout_cost_factor": 5.0
+    },
+    "logging": {
+      "type": "std_out",
+      "color": true
+    }
+  },
+  "service_limits": {
+    "auto": {
+      "max_distance": 500000,
+      "max_duration": 10800,
+      "max_locations": 50
+    },
+    "pedestrian": {
+      "max_distance": 25000,
+      "max_duration": 3600,
+      "max_locations": 50,
+      "max_nearest_distance": 2000,
+      "street_network_max_distance": 20000
+    },
+    "bicycle": {
+      "max_distance": 500000,
+      "max_duration": 10800,
+      "max_locations": 50
+    }
+  }
+}
+EOF
+
+# Switch to valhalla user
+USER valhalla
+
+# Expose Valhalla API port
+EXPOSE 8002
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8002/health || exit 1
+
+# Entry point
+COPY <<'EOF' /entrypoint.sh
+#!/bin/bash
+set -e
+
+DATA_DIR="/valhalla/data"
+CONF_FILE="/valhalla/conf/valhalla.json"
+PORT=8002
+
+echo "Starting Valhalla for Delhi NCR..."
+echo "Data directory: ${DATA_DIR}"
+
+# Check if tiles exist
+if [ ! -d "${DATA_DIR}/tiles" ]; then
+    echo "No tile data found at ${DATA_DIR}/tiles"
+    echo "Please build the tiles first using valhalla_build_tiles"
+    echo "Starting Valhalla in standalone mode (no routing available)..."
+fi
+
+# Start Valhalla service
+exec valhalla-service ${CONF_FILE}
+EOF
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Build arguments:
+# VALHALLA_VERSION=7.0.0 - Valhalla release version

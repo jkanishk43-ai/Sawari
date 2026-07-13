@@ -1,0 +1,200 @@
+# Sawaari Backend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: sawaari-backend
+  namespace: sawaari
+  labels:
+    app: sawaari-backend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: sawaari-backend
+
+---
+# OTP2 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: otp2
+  namespace: sawaari
+  labels:
+    app: otp2
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: otp2
+
+---
+# Valhalla Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: valhalla
+  namespace: sawaari
+  labels:
+    app: valhalla
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8002
+      targetPort: 8002
+      protocol: TCP
+      name: http
+  selector:
+    app: valhalla
+
+---
+# PostgreSQL Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: sawaari
+  labels:
+    app: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: postgres
+
+---
+# Valkey Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: sawaari
+  labels:
+    app: valkey
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: valkey
+
+---
+# ClickHouse Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: clickhouse
+  namespace: sawaari
+  labels:
+    app: clickhouse
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8123
+      targetPort: 8123
+      protocol: TCP
+      name: http
+    - port: 9000
+      targetPort: 9000
+      protocol: TCP
+      name: native
+  selector:
+    app: clickhouse
+
+---
+# Kafka Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  namespace: sawaari
+  labels:
+    app: kafka
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9092
+      targetPort: 9092
+      protocol: TCP
+      name: kafka
+  selector:
+    app: kafka
+
+---
+# Zookeeper Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: sawaari
+  labels:
+    app: zookeeper
+spec:
+  type: ClusterIP
+  ports:
+    - port: 2181
+      targetPort: 2181
+      protocol: TCP
+      name: client
+  selector:
+    app: zookeeper
+
+---
+# Kong Service (LoadBalancer for external access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: sawaari
+  labels:
+    app: kong
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+    - port: 443
+      targetPort: 8443
+      protocol: TCP
+      name: https
+  selector:
+    app: kong
+
+---
+# MinIO Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: sawaari
+  labels:
+    app: minio
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9000
+      targetPort: 9000
+      protocol: TCP
+      name: api
+    - port: 9001
+      targetPort: 9001
+      protocol: TCP
+      name: console
+  selector:
+    app: minio

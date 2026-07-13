@@ -1,0 +1,1159 @@
+openapi: 3.0.3
+info:
+  title: Sawaari API
+  description: |
+    Delhi multimodal fare-comparison and one-tap booking ecosystem API.
+
+    ## Overview
+    Sawaari provides unified access to multiple transportation providers in Delhi,
+    including app-cabs (Uber, Ola, Rapido), public transit (DMRC Metro, DTC/DIMTS bus),
+    auto-rickshaws, and intercity options (Redbus, AbhiBus, Indian Railways).
+
+    ## Authentication
+    All API endpoints require JWT Bearer token authentication. Obtain a token via
+    phone OTP verification. Include the token in the Authorization header:
+    ```
+    Authorization: Bearer <your_jwt_token>
+    ```
+
+    ## Rate Limits
+    - 100 requests per minute per user for standard endpoints
+    - 10 requests per minute for booking endpoints
+    - Rate limit headers are included in all responses
+  version: 1.0.0
+  contact:
+    name: Sawaari Support
+    email: support@sawaari.in
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.sawaari.in/v1
+    description: Production server
+  - url: https://api-staging.sawaari.in/v1
+    description: Staging server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Compare
+    description: Fare comparison operations
+  - name: Transit
+    description: Public transit information
+  - name: Live
+    description: Real-time vehicle positions
+  - name: Bookings
+    description: Booking management
+  - name: Wallet
+    description: Ticket vault and payments
+  - name: Alerts
+    description: Fare and disruption alerts
+  - name: Feedback
+    description: User feedback
+
+paths:
+  /compare:
+    post:
+      tags:
+        - Compare
+      summary: Compare fares for a trip
+      description: |
+        Returns ranked fare options from all available providers for the specified
+        origin and destination. Options include app-cabs, public transit, and
+        meter-based options with fare breakdowns and badges.
+      operationId: compareFares
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompareRequest'
+            examples:
+              basic:
+                summary: Basic trip comparison
+                value:
+                  from: "Rajiv Chowk Metro Station"
+                  to: "Connaught Place"
+              with_prefs:
+                summary: With user preferences
+                value:
+                  from: "Karol Bagh"
+                  to: "Aerocity Metro Station"
+                  prefs:
+                    ac: true
+                    saheli: true
+                    night: false
+                    surge: true
+                    wheelchair: false
+              with_coords:
+                summary: With coordinates
+                value:
+                  from_loc:
+                    lat: 28.6329
+                    lng: 77.2197
+                  to_loc:
+                    lat: 28.5494
+                    lng: 77.2000
+      responses:
+        '200':
+          description: Successful fare comparison
+          headers:
+            X-RateLimit-Limit:
+              description: Requests remaining in current window
+              schema:
+                type: integer
+            X-RateLimit-Remaining:
+              description: Maximum requests allowed in window
+              schema:
+                type: integer
+            X-RateLimit-Reset:
+              description: Unix timestamp when rate limit resets
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResponse'
+              example:
+                options:
+                  - id: "metro_standard"
+                    provider: "DMRC"
+                    mode: "metro"
+                    display_name: "DMRC Metro"
+                    price:
+                      min: 50
+                      max: 50
+                      currency: "INR"
+                      breakdown:
+                        - name: "Metro Fare"
+                          amount: 50
+                    eta_minutes: 25
+                    distance_km: 8.5
+                    badges: ["CHEAPEST"]
+                    bookable: true
+                  - id: "uber_cab"
+                    provider: "Uber"
+                    mode: "cab"
+                    display_name: "Uber Go"
+                    price:
+                      min: 180
+                      max: 250
+                      currency: "INR"
+                    eta_minutes: 5
+                    distance_km: 8.5
+                    badges: ["FASTEST", "SMART_PICK"]
+                    reliability: 0.92
+                    deeplink: "https://m.uber.com/ul/?action=setPickup&..."
+                    bookable: true
+                  - id: "auto_meter"
+                    provider: "meter"
+                    mode: "auto"
+                    display_name: "Meter Auto"
+                    price:
+                      min: 80
+                      max: 120
+                      currency: "INR"
+                    eta_minutes: 3
+                    distance_km: 8.5
+                    badges: []
+                    bookable: false
+                expires_at: "2026-07-14T12:35:00Z"
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /stops/nearby:
+    get:
+      tags:
+        - Transit
+      summary: Get nearby transit stops
+      description: |
+        Returns transit stops near the specified location with next departure
+        information. Live ETAs are included where GTFS-RT data is available.
+      operationId: getNearbyStops
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          description: Latitude of the location
+          schema:
+            type: number
+            format: double
+            minimum: -90
+            maximum: 90
+          example: 28.6329
+        - name: lng
+          in: query
+          required: true
+          description: Longitude of the location
+          schema:
+            type: number
+            format: double
+            minimum: -180
+            maximum: 180
+          example: 77.2197
+        - name: r
+          in: query
+          required: false
+          description: Search radius in meters
+          schema:
+            type: integer
+            default: 500
+            minimum: 100
+            maximum: 5000
+          example: 500
+        - name: modes
+          in: query
+          required: false
+          description: Filter by transport modes (comma-separated)
+          schema:
+            type: string
+            enum: [metro, bus, auto, cab, bike]
+          example: "metro,bus"
+      responses:
+        '200':
+          description: List of nearby stops
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NearbyStopsResponse'
+              example:
+                stops:
+                  - id: "metro_rajiv_chowk"
+                    name: "Rajiv Chowk Metro Station"
+                    mode: "metro"
+                    distance_m: 120
+                    location:
+                      lat: 28.6329
+                      lng: 77.2197
+                    next_departures:
+                      - route_no: "Blue Line"
+                        direction: "Dwarka"
+                        eta_seconds: 180
+                        platform: "Platform 2"
+                  - id: "dtc_rajiv_chowk"
+                    name: "Rajiv Chowk"
+                    mode: "bus"
+                    distance_m: 85
+                    location:
+                      lat: 28.6325
+                      lng: 77.2190
+                    next_departures:
+                      - route_no: "427"
+                            direction: "Kashmere Gate"
+                            eta_seconds: 420
+                            platform: "Stop A"
+                searched_at: "2026-07-14T12:30:00Z"
+        '400':
+          description: Invalid coordinates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /routes/{no}:
+    get:
+      tags:
+        - Transit
+      summary: Get route details
+      description: |
+        Returns detailed information about a specific transit route including
+        stops, schedule, headway, fare slabs, and first/last service times.
+      operationId: getRouteDetails
+      parameters:
+        - name: no
+          in: path
+          required: true
+          description: Route number or identifier
+          schema:
+            type: string
+          example: "BL-9"
+        - name: mode
+          in: query
+          required: false
+          description: Filter by transport mode
+          schema:
+            type: string
+            enum: [metro, bus, auto, cab]
+      responses:
+        '200':
+          description: Route details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteDetails'
+              example:
+                route_no: "BL-9"
+                mode: "metro"
+                name: "Blue Line - Dwarka Sector 21"
+                operator: "DMRC"
+                direction: "Dwarka Sector 21"
+                stops:
+                  - id: "blue_rajiv_chowk"
+                    name: "Rajiv Chowk"
+                    sequence: 9
+                    distance_from_start_km: 4.2
+                    fare_from_first: 30
+                  - id: "blue_barakhamba"
+                    name: "Barakhamba Road"
+                    sequence: 10
+                    distance_from_start_km: 5.1
+                    fare_from_first: 35
+                first_service: "05:30"
+                last_service: "23:30"
+                headway_minutes: 4
+                fare_slab:
+                  min: 11
+                  max: 64
+                  description: "Aug-2025 DMRC fare slab"
+        '404':
+          description: Route not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /live/route/{no}:
+    get:
+      tags:
+        - Live
+      summary: Get live route positions
+      description: |
+        Returns a Server-Sent Events (SSE) stream of real-time vehicle positions
+        for the specified route. Updates are pushed every 10 seconds.
+
+        ## SSE Stream Format
+        Each event follows the format:
+        ```
+        event: position
+        data: {"vehicle_id":"...","lat":...,"lng":...,"bearing":...,"speed_kmh":...}
+
+        event: eta
+        data: {"stop_id":"...","vehicle_id":"...","eta_seconds":...}
+        ```
+      operationId: streamLivePositions
+      parameters:
+        - name: no
+          in: path
+          required: true
+          description: Route number
+          schema:
+            type: string
+          example: "427"
+      responses:
+        '200':
+          description: SSE stream of vehicle positions
+          headers:
+            Content-Type:
+              description: text/event-stream
+              schema:
+                type: string
+                example: "text/event-stream"
+            Cache-Control:
+              description: No cache for SSE
+              schema:
+                type: string
+                example: "no-cache"
+            Connection:
+              description: Keep connection alive
+              schema:
+                type: string
+                example: "keep-alive"
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/LivePosition'
+              example: |
+                event: position
+                data: {"vehicle_id":"DL-1PC-1234","lat":28.6329,"lng":77.2197,"bearing":45,"speed_kmh":25,"timestamp":"2026-07-14T12:30:00Z"}
+
+                event: eta
+                data: {"stop_id":"rajiv_chowk","vehicle_id":"DL-1PC-1234","eta_seconds":180,"load":"medium"}
+
+        '404':
+          description: Route not found or no live data available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /bookings:
+    post:
+      tags:
+        - Bookings
+      summary: Create a booking
+      description: |
+        Initiates a booking through the specified rail (ONDC or deeplink).
+        For ONDC bookings, the transaction is processed natively.
+        For deeplink bookings, returns a pre-filled booking URL.
+      operationId: createBooking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+            example:
+              option_id: "uber_cab"
+              rail: "deeplink"
+      responses:
+        '201':
+          description: Booking created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+              example:
+                status: "pending"
+                booking_id: "bkg_abc123xyz"
+                deeplink: "https://m.uber.com/ul/?action=setPickup&..."
+                message: "Complete booking in the provider app"
+        '400':
+          description: Invalid booking request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Booking conflict - option no longer available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Bookings
+      summary: List user bookings
+      description: Returns paginated list of user's bookings
+      operationId: listBookings
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by booking status
+          schema:
+            type: string
+            enum: [pending, completed, cancelled, expired]
+        - name: limit
+          in: query
+          required: false
+          description: Number of results per page
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: offset
+          in: query
+          required: false
+          description: Number of results to skip
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingListResponse'
+              example:
+                bookings:
+                  - id: "bkg_abc123xyz"
+                    option_id: "uber_cab"
+                    provider: "Uber"
+                    mode: "cab"
+                    status: "completed"
+                    created_at: "2026-07-14T10:30:00Z"
+                    fare: 245.00
+                    currency: "INR"
+                total: 45
+                limit: 20
+                offset: 0
+
+  /wallet/tickets:
+    get:
+      tags:
+        - Wallet
+      summary: Get user's ticket vault
+      description: |
+        Returns all tickets in the user's wallet including active and used tickets.
+        Tickets include QR codes for verification at entry points.
+      operationId: getTickets
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter by ticket status
+          schema:
+            type: string
+            enum: [active, used, expired]
+        - name: type
+          in: query
+          required: false
+          description: Filter by ticket type
+          schema:
+            type: string
+            enum: [metro, bus, movie, event, parking]
+      responses:
+        '200':
+          description: List of tickets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketListResponse'
+              example:
+                tickets:
+                  - id: "tkt_xyz789"
+                    type: "metro"
+                    provider: "DMRC"
+                    route: "Blue Line"
+                    from: "Rajiv Chowk"
+                    to: "Dwarka Sector 21"
+                    valid_from: "2026-07-14T08:00:00Z"
+                    valid_to: "2026-07-14T23:59:00Z"
+                    status: "active"
+                    qr_payload: "DMRC|2026-07-14|..."
+                    price: 60
+                    currency: "INR"
+                total: 12
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /wallet/tickets/{id}.pdf:
+    get:
+      tags:
+        - Wallet
+      summary: Download ticket as PDF
+      description: Returns a PDF ticket for download or sharing
+      operationId: downloadTicketPDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Ticket ID
+          schema:
+            type: string
+          example: "tkt_xyz789"
+      responses:
+        '200':
+          description: PDF ticket file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Ticket not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /alerts:
+    post:
+      tags:
+        - Alerts
+      summary: Create a fare alert
+      description: |
+        Sets up a watcher for fare changes or service disruptions on a route.
+        Notifications are sent via push notification, WhatsApp, or Telegram.
+      operationId: createAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertRequest'
+            examples:
+              fare_drop:
+                summary: Alert when fare drops below threshold
+                value:
+                  kind: "fare_drop"
+                  route:
+                    from: "Rajiv Chowk"
+                    to: "Dwarka Sector 21"
+                  modes: ["metro", "cab"]
+                  threshold: 40
+                  notify_via: ["push", "whatsapp"]
+              disruption:
+                summary: Alert on service disruptions
+                value:
+                  kind: "disruption"
+                  route_no: "BL-9"
+                  notify_via: ["push"]
+      responses:
+        '201':
+          description: Alert created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResponse'
+              example:
+                id: "alt_def456"
+                kind: "fare_drop"
+                status: "active"
+                created_at: "2026-07-14T12:30:00Z"
+        '400':
+          description: Invalid alert configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      tags:
+        - Alerts
+      summary: List user's alerts
+      description: Returns all active and past alerts for the user
+      operationId: listAlerts
+      responses:
+        '200':
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertResponse'
+
+  /feedback/quote:
+    post:
+      tags:
+        - Feedback
+      summary: Submit fare feedback
+      description: |
+        Reports the actual fare paid for a quote. This data is used to train
+        and improve estimate models. Contributors help make fare estimates
+        more accurate for all users.
+      operationId: submitFareFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FareFeedbackRequest'
+            example:
+              quote_id: "qte_abc123"
+              provider: "Uber"
+              mode: "cab"
+              actual_fare: 235.00
+              currency: "INR"
+              notes: "Normal traffic, no surge"
+      responses:
+        '201':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  status:
+                    type: string
+                  thank_you_message:
+                    type: string
+              example:
+                id: "fbk_ghi789"
+                status: "recorded"
+                thank_you_message: "Thanks for helping improve Sawaari estimates!"
+        '400':
+          description: Invalid feedback data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained via phone OTP verification
+
+  schemas:
+    CompareRequest:
+      type: object
+      required:
+        - from
+        - to
+      properties:
+        from:
+          type: string
+          description: Origin address or place name
+          example: "Rajiv Chowk Metro Station"
+        to:
+          type: string
+          description: Destination address or place name
+          example: "Connaught Place"
+        from_loc:
+          $ref: '#/components/schemas/Location'
+        to_loc:
+          $ref: '#/components/schemas/Location'
+        prefs:
+          $ref: '#/components/schemas/UserPrefs'
+
+    UserPrefs:
+      type: object
+      properties:
+        ac:
+          type: boolean
+          description: Prefer AC vehicles
+          default: false
+        saheli:
+          type: boolean
+          description: Women-only transport (Saheli scheme)
+          default: false
+        night:
+          type: boolean
+          description: Night travel preference
+          default: false
+        surge:
+          type: boolean
+          description: Allow surge-priced options
+          default: true
+        wheelchair:
+          type: boolean
+          description: Wheelchair accessibility required
+          default: false
+
+    Location:
+      type: object
+      properties:
+        lat:
+          type: number
+          format: double
+          description: Latitude
+        lng:
+          type: number
+          format: double
+          description: Longitude
+
+    CompareResponse:
+      type: object
+      properties:
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/RideOption'
+        expires_at:
+          type: string
+          format: date-time
+          description: When these quotes expire
+
+    RideOption:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for this option
+          example: "uber_cab"
+        provider:
+          type: string
+          description: Provider name
+          example: "Uber"
+        mode:
+          type: string
+          description: Transport mode
+          enum: [metro, bus, auto, cab, bike, train, e-rickshaw]
+          example: "cab"
+        display_name:
+          type: string
+          example: "Uber Go"
+        price:
+          $ref: '#/components/schemas/Price'
+        eta_minutes:
+          type: integer
+          description: Estimated time of arrival in minutes
+        distance_km:
+          type: number
+          format: double
+          description: Distance in kilometers
+        badges:
+          type: array
+          items:
+            type: string
+          description: Achievement badges
+          example: ["CHEAPEST", "FASTEST", "SMART_PICK"]
+        reliability:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Provider reliability score (cancellation rate inverse)
+        deeplink:
+          type: string
+          format: uri
+          description: Direct booking URL (for bookable options)
+        bookable:
+          type: boolean
+          description: Whether direct booking is available
+
+    Price:
+      type: object
+      properties:
+        min:
+          type: number
+          format: double
+          description: Minimum estimated price
+        max:
+          type: number
+          format: double
+          description: Maximum estimated price
+        currency:
+          type: string
+          default: "INR"
+        breakdown:
+          type: array
+          items:
+            $ref: '#/components/schemas/LineItem'
+
+    LineItem:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Component name
+          example: "Base Fare"
+        amount:
+          type: number
+          format: double
+
+    NearbyStopsResponse:
+      type: object
+      properties:
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/NearbyStop'
+        searched_at:
+          type: string
+          format: date-time
+
+    NearbyStop:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [metro, bus, auto, cab]
+        distance_m:
+          type: integer
+          description: Distance from search point in meters
+        location:
+          $ref: '#/components/schemas/Location'
+        next_departures:
+          type: array
+          items:
+            $ref: '#/components/schemas/NextDeparture'
+
+    NextDeparture:
+      type: object
+      properties:
+        route_no:
+          type: string
+        direction:
+          type: string
+        eta_seconds:
+          type: integer
+          description: ETA in seconds
+        platform:
+          type: string
+
+    RouteDetails:
+      type: object
+      properties:
+        route_no:
+          type: string
+        mode:
+          type: string
+          enum: [metro, bus, auto, cab]
+        name:
+          type: string
+        operator:
+          type: string
+        direction:
+          type: string
+        stops:
+          type: array
+          items:
+            $ref: '#/components/schemas/RouteStop'
+        first_service:
+          type: string
+          description: First service time HH:MM
+        last_service:
+          type: string
+          description: Last service time HH:MM
+        headway_minutes:
+          type: integer
+        fare_slab:
+          $ref: '#/components/schemas/FareSlab'
+
+    RouteStop:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        sequence:
+          type: integer
+        distance_from_start_km:
+          type: number
+          format: double
+        fare_from_first:
+          type: number
+
+    FareSlab:
+      type: object
+      properties:
+        min:
+          type: number
+        max:
+          type: number
+        description:
+          type: string
+
+    LivePosition:
+      type: object
+      properties:
+        vehicle_id:
+          type: string
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        bearing:
+          type: number
+          description: Direction in degrees
+        speed_kmh:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    BookingRequest:
+      type: object
+      required:
+        - option_id
+        - rail
+      properties:
+        option_id:
+          type: string
+          description: ID of the ride option to book
+          example: "uber_cab"
+        rail:
+          type: string
+          enum: [ondc, deeplink]
+          description: Booking rail to use
+
+    BookingResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [pending, completed, failed]
+        booking_id:
+          type: string
+        deeplink:
+          type: string
+          format: uri
+        message:
+          type: string
+
+    BookingListResponse:
+      type: object
+      properties:
+        bookings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Booking'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+        option_id:
+          type: string
+        provider:
+          type: string
+        mode:
+          type: string
+        status:
+          type: string
+          enum: [pending, completed, cancelled, expired]
+        created_at:
+          type: string
+          format: date-time
+        fare:
+          type: number
+        currency:
+          type: string
+
+    TicketListResponse:
+      type: object
+      properties:
+        tickets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Ticket'
+        total:
+          type: integer
+
+    Ticket:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [metro, bus, movie, event, parking]
+        provider:
+          type: string
+        route:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, used, expired]
+        qr_payload:
+          type: string
+          description: QR code data for verification
+        price:
+          type: number
+        currency:
+          type: string
+
+    AlertRequest:
+      type: object
+      required:
+        - kind
+        - notify_via
+      properties:
+        kind:
+          type: string
+          enum: [fare_drop, disruption]
+        route:
+          type: object
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+        route_no:
+          type: string
+        modes:
+          type: array
+          items:
+            type: string
+          enum: [metro, bus, auto, cab, bike]
+        threshold:
+          type: number
+          description: Price threshold for fare_drop alerts
+        notify_via:
+          type: array
+          items:
+            type: string
+            enum: [push, whatsapp, telegram]
+          minItems: 1
+
+    AlertResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        status:
+          type: string
+          enum: [active, paused, fired, deleted]
+        created_at:
+          type: string
+          format: date-time
+
+    FareFeedbackRequest:
+      type: object
+      required:
+        - quote_id
+        - actual_fare
+      properties:
+        quote_id:
+          type: string
+          description: ID of the quote being reviewed
+        provider:
+          type: string
+          description: Provider name
+        mode:
+          type: string
+          description: Transport mode
+        actual_fare:
+          type: number
+          format: double
+        currency:
+          type: string
+          default: "INR"
+        notes:
+          type: string
+          description: Optional notes about the trip
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "INVALID_REQUEST"
+            message:
+              type: string
+              example: "Missing required parameter: from"
+            details:
+              type: object
+              additionalProperties: true

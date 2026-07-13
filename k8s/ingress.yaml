@@ -1,0 +1,78 @@
+# Kong Ingress Controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sawaari-ingress
+  namespace: sawaari
+  annotations:
+    kubernetes.io/ingress.class: "kong"
+    konghq.com/preserve-host: "true"
+    konghq.com/plugins: "rate-limiting,correlation-id,cors"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  rules:
+    # API Gateway
+    - host: api.sawaari.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kong
+                port:
+                  number: 80
+
+    # Grafana Dashboard
+    - host: grafana.sawaari.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-grafana
+                port:
+                  number: 80
+
+    # Prometheus Metrics
+    - host: prometheus.sawaari.in
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-server
+                port:
+                  number: 9090
+
+  # TLS
+  tls:
+    - hosts:
+        - api.sawaari.in
+        - grafana.sawaari.in
+        - prometheus.sawaari.in
+      secretName: sawaari-tls-secret
+
+---
+# Internal API Ingress (no external TLS)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sawaari-internal-ingress
+  namespace: sawaari
+  annotations:
+    kubernetes.io/ingress.class: "kong-internal"
+spec:
+  rules:
+    - host: backend.sawaari.svc.cluster.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sawaari-backend
+                port:
+                  number: 8080

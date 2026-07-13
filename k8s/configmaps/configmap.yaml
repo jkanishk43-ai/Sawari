@@ -1,0 +1,127 @@
+# Sawaari Backend ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sawaari-backend-config
+  namespace: sawaari
+data:
+  # Application Settings
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+  PORT: "8080"
+
+  # Database Connection (template)
+  DATABASE_URL: "postgres://sawaari@postgres/sawaari?sslmode=disable"
+
+  # Service URLs
+  OTP2_URL: "http://otp2:8080"
+  VALHALLA_URL: "http://valhalla:8002"
+  PHOTON_URL: "http://photon:2322"
+
+  # Kafka Topics
+  KAFKA_TOPIC_POSITIONS: "bus.positions"
+  KAFKA_TOPIC_QUOTES: "quotes.issued"
+  KAFKA_TOPIC_BOOKINGS: "bookings.state"
+
+  # S3/MinIO
+  S3_ENDPOINT: "http://minio:9000"
+  S3_BUCKET_TICKETS: "sawaari-tickets"
+  S3_BUCKET_GTFS: "sawaari-gtfs"
+  S3_REGION: "us-east-1"
+
+  # GTFS Settings
+  GTFS_FEED_URL: "https://otd.delhi.gov.in/gtfs/static"
+  GTFS_REALTIME_URL: "https://otd.delhi.gov.in/gtfs/realtime"
+  GTFS_UPDATE_INTERVAL: "86400"  # 24 hours in seconds
+
+  # Fare Engine Defaults
+  DEFAULT_CURRENCY: "INR"
+  SURGE_MULTIPLIER_MAX: "3.0"
+
+  # ONDC Settings
+  ONDC_GATEWAY_URL: "https://api.ondc.org"
+  ONDC_SUBSCRIBER_ID: "sawaari_on_in"
+---
+# Kong Declarative Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kong-declarative-config
+  namespace: sawaari
+data:
+  declarative.yml: |
+    _format_version: "3.0"
+
+    # Services
+    services:
+      - name: sawaari-backend
+        url: http://sawaari-backend
+        routes:
+          - name: sawaari-api
+            paths:
+              - /v1
+            strip_path: false
+            plugins:
+              - name: sawaari-rate-limit
+              - name: sawaari-cors
+              - name: sawaari-request-transformer
+        plugins:
+          - name: jwt
+          - name: key-auth
+
+      - name: otp2
+        url: http://otp2:8080
+        routes:
+          - name: otp2-api
+            paths:
+              - /otp
+            strip_path: true
+
+      - name: valhalla
+        url: http://valhalla:8002
+        routes:
+          - name: valhalla-api
+            paths:
+              - /valhalla
+            strip_path: true
+
+      - name: photon
+        url: http://photon:2322
+        routes:
+          - name: photon-api
+            paths:
+              - /geocode
+            strip_path: true
+
+      - name: minio
+        url: http://minio:9000
+        routes:
+          - name: minio-api
+            paths:
+              - /storage
+            strip_path: true
+
+    # Consumers (API Keys)
+    consumers:
+      - username: mobile-app
+        keyauth_credentials:
+          - key: mobile-app-key-change-in-production
+      - username: web-app
+        keyauth_credentials:
+          - key: web-app-key-change-in-production
+      - username: internal-services
+        keyauth_credentials:
+          - key: internal-services-key-change-in-production
+
+    # Global Plugins
+    plugins:
+      - name: ip-restriction
+        config:
+          allow:
+            - 0.0.0.0/0
+          deny:
+            - 0.0.0.0/32
+      - name: bot-detection
+      - name: request-size-limiting
+        config:
+          allowed_payload_size: 10

@@ -1,0 +1,469 @@
+# Sawaari Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sawaari-backend
+  namespace: sawaari
+  labels:
+    app: sawaari-backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sawaari-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: sawaari-backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: sawaari-backend
+          image: sawaari/backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: POSTGRES_PASSWORD
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: CLICKHOUSE_PASSWORD
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: JWT_SECRET
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: MINIO_ROOT_PASSWORD
+          envFrom:
+            - configMapRef:
+                name: sawaari-backend-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: sawaari-backend
+                topologyKey: kubernetes.io/hostname
+
+---
+# OTP2 Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otp2
+  namespace: sawaari
+  labels:
+    app: otp2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otp2
+  template:
+    metadata:
+      labels:
+        app: otp2
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: otp2
+          image: sawaari/otp2:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: JAVA_OPTS
+              value: "-Xmx6g -Xms2g -server -XX:+UseG1GC"
+            - name: OTP_PORT
+              value: "8080"
+            - name: OTP_GRAPH_DIR
+              value: "/var/otp/graphs"
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "1000m"
+            limits:
+              memory: "8Gi"
+              cpu: "2000m"
+          livenessProbe:
+            httpGet:
+              path: /otp/
+              port: 8080
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /otp/
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: otp2-graphs
+              mountPath: /var/otp/graphs
+      volumes:
+        - name: otp2-graphs
+          persistentVolumeClaim:
+            claimName: otp2-graphs-pvc
+
+---
+# Valhalla Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valhalla
+  namespace: sawaari
+  labels:
+    app: valhalla
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: valhalla
+  template:
+    metadata:
+      labels:
+        app: valhalla
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      containers:
+        - name: valhalla
+          image: sawaari/valhalla:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8002
+              name: http
+          env:
+            - name: SERVICE_PORT
+              value: "8002"
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: valhalla-data
+              mountPath: /valhalla/data
+      volumes:
+        - name: valhalla-data
+          persistentVolumeClaim:
+            claimName: valhalla-data-pvc
+
+---
+# Postgres Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: sawaari
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+      annotations:
+        prometheus.io/scrape: "false"
+    spec:
+      containers:
+        - name: postgres
+          image: postgis/postgis:16-3.4
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: POSTGRES_PASSWORD
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data-pvc
+
+---
+# Valkey Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: sawaari
+  labels:
+    app: valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6379"
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:8.0
+          ports:
+            - containerPort: 6379
+              name: redis
+          args:
+            - valkey-server
+            - --maxmemory
+            - 512mb
+            - --maxmemory-policy
+            - allkeys-lru
+            - --appendonly
+            - "yes"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "250m"
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+      volumes:
+        - name: valkey-data
+          persistentVolumeClaim:
+            claimName: valkey-data-pvc
+
+---
+# ClickHouse Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clickhouse
+  namespace: sawaari
+  labels:
+    app: clickhouse
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clickhouse
+  template:
+    metadata:
+      labels:
+        app: clickhouse
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8123"
+    spec:
+      containers:
+        - name: clickhouse
+          image: clickhouse/clickhouse-server:24.5
+          ports:
+            - containerPort: 8123
+              name: http
+            - containerPort: 9000
+              name: native
+          env:
+            - name: CLICKHOUSE_DB
+              value: "sawaari"
+            - name: CLICKHOUSE_USER
+              value: "sawaari"
+            - name: CLICKHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: CLICKHOUSE_PASSWORD
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: clickhouse-data
+              mountPath: /var/lib/clickhouse
+      volumes:
+        - name: clickhouse-data
+          persistentVolumeClaim:
+            claimName: clickhouse-data-pvc
+
+---
+# Kong API Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: sawaari
+  labels:
+    app: kong
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8100"
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.6
+          env:
+            - name: KONG_DATABASE
+              value: "postgres"
+            - name: KONG_PG_HOST
+              value: "postgres.sawaari.svc.cluster.local"
+            - name: KONG_PG_PORT
+              value: "5432"
+            - name: KONG_PG_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_USER
+            - name: KONG_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-backend-secret
+                  key: POSTGRES_PASSWORD
+            - name: KONG_PG_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-config
+                  key: POSTGRES_DB
+            - name: KONG_ADMIN_LISTEN
+              value: "0.0.0.0:8001"
+          ports:
+            - containerPort: 8000
+              name: proxy
+            - containerPort: 8443
+              name: proxy-ssl
+            - containerPort: 8001
+              name: admin
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3

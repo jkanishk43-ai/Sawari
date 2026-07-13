@@ -1,0 +1,242 @@
+_format_version: "3.0"
+_transform: true
+
+# ---------------------------------------------------------------
+# Sawaari API Gateway — Kong OSS declarative config
+# ---------------------------------------------------------------
+# Two listeners:
+#   8000 — public HTTP (frontend / bot clients)
+#   8443 — public HTTPS
+#   8001 — admin (loopback only)
+# ---------------------------------------------------------------
+
+services:
+  - name: sawaari-backend
+    url: http://backend:8080
+    path: /
+    connect_timeout: 5000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 3
+
+  - name: otp2
+    url: http://otp2:8080
+    path: /otp
+    connect_timeout: 5000
+    read_timeout: 30000
+    retries: 2
+
+  - name: valhalla
+    url: http://valhalla:8002
+    path: /
+    connect_timeout: 5000
+    read_timeout: 30000
+    retries: 2
+
+  - name: geocoding-photon
+    url: http://photon:2322
+    path: /api
+    connect_timeout: 5000
+    read_timeout: 10000
+    retries: 2
+
+routes:
+  # --- /v1/* → backend ---
+  - name: api-v1
+    service: sawaari-backend
+    paths:
+      - /v1
+    strip_path: false
+    methods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+      - OPTIONS
+    headers:
+      Access-Control-Allow-Origin:
+        - "*"
+      X-Sawaari-Path:
+        - v1
+
+  # --- /health → backend ---
+  - name: health
+    service: sawaari-backend
+    paths:
+      - /health
+      - /healthz
+    strip_path: false
+
+  # --- /routers/default/plan → OTP2 ---
+  - name: otp2-plan
+    service: otp2
+    paths:
+      - /otp
+    strip_path: true
+
+  # --- /route → Valhalla ---
+  - name: valhalla-route
+    service: valhalla
+    paths:
+      - /route
+      - /isochrone
+      - /matrix
+    strip_path: false
+
+  # --- /geocode → Photon ---
+  - name: photon-geocode
+    service: geocoding-photon
+    paths:
+      - /geocode
+    strip_path: true
+
+plugins:
+  # --- Global: CORS ---
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Authorization
+        - Content-Type
+        - X-Sawaari-User
+        - X-Sawaari-Path
+        - X-Request-Id
+      exposed_headers:
+        - X-Cache
+        - X-Request-Id
+      max_age: 86400
+      preflight_continue: false
+
+  # --- Global: rate limiting (per-IP) ---
+  - name: rate-limiting
+    config:
+      minute: 120
+      hour: 5000
+      policy: ip
+      fault_tolerant: true
+
+  # --- JWT validation for /v1/* ---
+  - name: jwt
+    route: api-v1
+    config:
+      uri_param_names:
+        - jwt
+      cookie_names: []
+      header_names:
+        - Authorization
+      claims_to_verify:
+        - exp
+        - iat
+      key_claim_name: iss
+      secret_is_base64: false
+      run_on_preflight: false
+
+  # --- Request transformer (add headers for downstream) ---
+  - name: request-transformer
+    route: api-v1
+    config:
+      add:
+        headers:
+          - X-Sawaari-Gateway:kong
+          - X-Sawaari-Request-Time:$(now_iso)
+
+  # --- Response transformer (CORS + cache hint) ---
+  - name: response-transformer
+    route: api-v1
+    config:
+      add:
+        headers:
+          - X-Powered-By:Sawaari
+      remove:
+        headers:
+          - Server
+          - X-Powered-By
+
+  # --- Bot detection + blocking ---
+  - name: bot-detection
+    config:
+      allow:
+        - googlebot
+        - bingbot
+        - duckduckbot
+      deny:
+        - masscan
+        - nmap
+        - nessus
+
+  # --- Compression ---
+  - name: compression
+    config:
+      compress_request_body: false
+      compression_level: 5
+      content_types:
+        - application/json
+        - text/event-stream
+
+upstreams:
+  - name: sawaari-backend-upstream
+    targets:
+      - target: backend:8080
+        weight: 100
+    healthchecks:
+      active:
+        healthy:
+          interval: 30
+          successes: 2
+        http_statuses:
+          - 200
+          - 204
+        path: /health
+      passive:
+        healthy:
+          successes: 2
+        unhealthy:
+          tcp_failures: 3
+          http_failures: 3
+          timeouts: 3
+
+  - name: otp2-upstream
+    targets:
+      - target: otp2:8080
+        weight: 100
+    healthchecks:
+      active:
+        healthy:
+          interval: 60
+          successes: 1
+        path: /otp/actuator/health
+
+  - name: valhalla-upstream
+    targets:
+      - target: valhalla:8002
+        weight: 100
+    healthchecks:
+      active:
+        healthy:
+          interval: 60
+          successes: 1
+        path: /status
+
+consumers:
+  - username: ops-internal
+    custom_id: ops-internal
+    acls:
+      - group: ops
+  - username: smoke-test
+    custom_id: smoke-test
+    acls:
+      - group: smoke
+
+acls:
+  - group: ops
+  - group: smoke
+
+consumer_groups: []

@@ -1,0 +1,13 @@
+# Sawaari Telegram Bot Dependencies
+
+# Telegram Bot Framework
+python-telegram-bot[ext]==20.7
+
+# Async HTTP client for backend API calls
+httpx[http2]==0.27.0
+
+# Data validation
+pydantic==2.9.2
+
+# Environment variable management
+python-dotenv==1.0.1

@@ -1,0 +1,86 @@
+# Kong Ingress Configuration
+# Routes external traffic through Kong API Gateway
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sawaari-ingress
+  namespace: sawaari
+  annotations:
+    kubernetes.io/ingress.class: kong
+    konghq.com/preserve-host: "true"
+    konghq.com/protocol: "http"
+spec:
+  rules:
+    - host: api.sawaari.in
+      http:
+        paths:
+          # API Routes
+          - path: /v1/
+            pathType: Prefix
+            backend:
+              service:
+                name: sawaari-backend
+                port:
+                  number: 80
+    - host: console.sawaari.in
+      http:
+        paths:
+          # MinIO Console
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9001
+---
+# KongPlugin for Rate Limiting
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: sawaari-rate-limit
+  namespace: sawaari
+config:
+  minute: 100
+  policy: local
+  fault_tolerant: true
+---
+# KongPlugin for CORS
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: sawaari-cors
+  namespace: sawaari
+plugin: cors
+config:
+  origins:
+    - "https://sawaari.in"
+    - "https://www.sawaari.in"
+    - "https://app.sawaari.in"
+  methods:
+    - GET
+    - POST
+    - PUT
+    - DELETE
+    - OPTIONS
+  headers:
+    - Authorization
+    - Content-Type
+    - X-Request-ID
+  credentials: true
+  max_age: 3600
+---
+# KongPlugin for Request Transformer
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: sawaari-request-transformer
+  namespace: sawaari
+plugin: request-transformer
+config:
+  add:
+    headers:
+      - X-Sawaari-Version:v1
+  remove:
+    headers:
+      - X-Internal-Debug

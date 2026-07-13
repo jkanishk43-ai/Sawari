@@ -1,0 +1,8 @@
+# Sawaari Kubernetes manifests
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sawaari
+  labels:
+    app.kubernetes.io/name: sawaari
+    app.kubernetes.io/part-of: sawaari-platform
