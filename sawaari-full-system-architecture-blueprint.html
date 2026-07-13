@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sawaari — Full System Architecture Blueprint</title>
+  
+  <!-- Typography & Libraries -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Mermaid library for architectural flowcharts -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <style>
+    /* CSS Variables & Theme Setup */
+    :root {
+      --pine-dark: #073020;
+      --pine-mid: #0b3d29;
+      --pine-light: #eff6f3;
+      --pine-accent: #124c38;
+      --paper-white: #fbfaf7;
+      --paper-grid: #e8e5db;
+      --charcoal: #1a1a1a;
+      --ink-dim: #555e5a;
+      --font-header: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+      --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+      --glass-bg: rgba(251, 250, 247, 0.85);
+      --glass-border: rgba(11, 61, 41, 0.15);
+    }
+
+    /* Core Styles & Drafting Grid Background */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background-color: var(--paper-white);
+      background-image: 
+        linear-gradient(var(--paper-grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--paper-grid) 1px, transparent 1px);
+      background-size: 24px 24px;
+      color: var(--charcoal);
+      font-family: var(--font-body);
+      line-height: 1.6;
+      padding-top: 40px; /* space for sticky bar */
+    }
+
+    /* Readability & Spacing Constraints (Non-negotiable 5% side padding) */
+    .content-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 2rem 5%;
+    }
+
+    /* Master Sticky Bar */
+    .sticky-bar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 40px;
+      background-color: var(--pine-dark);
+      color: var(--paper-white);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 5%;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      z-index: 1000;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .sticky-bar-brand {
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--paper-white);
+      text-decoration: none;
+    }
+
+    .sticky-nav {
+      display: flex;
+      gap: 1rem;
+      overflow-x: auto;
+      white-space: nowrap;
+      scrollbar-width: none; /* Hide scrollbar for clean drafting look */
+    }
+    .sticky-nav::-webkit-scrollbar {
+      display: none;
+    }
+
+    .sticky-nav a {
+      color: rgba(255, 255, 255, 0.7);
+      text-decoration: none;
+      text-transform: uppercase;
+      transition: color 0.2s ease;
+    }
+
+    .sticky-nav a:hover {
+      color: var(--paper-white);
+    }
+
+    /* Header Blueprint Title Block styling */
+    .master-header {
+      border: 3px double var(--pine-dark);
+      padding: 2.5rem;
+      margin-bottom: 4rem;
+      background: var(--glass-bg);
+      backdrop-filter: blur(5px);
+      position: relative;
+    }
+
+    .master-header::before {
+      content: "MASTER CONTROL SHEET";
+      position: absolute;
+      top: 6px;
+      right: 12px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--ink-dim);
+      letter-spacing: 0.2em;
+    }
+
+    .master-header h1 {
+      font-family: var(--font-header);
+      font-size: 2.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--pine-dark);
+      line-height: 1.1;
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    .master-header p {
+      font-family: var(--font-mono);
+      font-size: 0.9rem;
+      color: var(--pine-mid);
+      border-left: 3px solid var(--pine-mid);
+      padding-left: 1rem;
+    }
+
+    /* Section & Plate Title Blocks styling */
+    section {
+      margin-bottom: 5rem;
+      scroll-margin-top: 60px; /* offset for sticky bar */
+    }
+
+    .plate-title-block {
+      border: 2px solid var(--pine-dark);
+      margin-bottom: 2rem;
+      display: grid;
+      grid-template-columns: 120px 1fr 180px;
+      font-family: var(--font-mono);
+      background: var(--pine-light);
+    }
+
+    @media (max-width: 768px) {
+      .plate-title-block {
+        grid-template-columns: 1fr;
+      }
+      .plate-cell {
+        border-right: none !important;
+        border-bottom: 1px solid var(--pine-dark);
+      }
+      .plate-cell:last-child {
+        border-bottom: none;
+      }
+    }
+
+    .plate-cell {
+      padding: 0.75rem 1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .plate-cell-num {
+      background-color: var(--pine-dark);
+      color: var(--paper-white);
+      font-weight: 700;
+      font-size: 1.1rem;
+      text-align: center;
+      letter-spacing: 0.05em;
+      border-right: 2px solid var(--pine-dark);
+    }
+
+    .plate-cell-title {
+      border-right: 2px solid var(--pine-dark);
+    }
+
+    .plate-cell-title h2 {
+      font-family: var(--font-header);
+      font-size: 1.2rem;
+      color: var(--pine-dark);
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .plate-cell-meta {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      color: var(--ink-dim);
+      text-align: right;
+    }
+
+    @media (max-width: 768px) {
+      .plate-cell-meta {
+        text-align: left;
+      }
+    }
+
+    /* Architectural blueprint cards */
+    .blueprint-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(8px);
+      padding: 2rem;
+      margin-bottom: 2rem;
+      position: relative;
+    }
+
+    .blueprint-card::before {
+      content: '';
+      position: absolute;
+      top: -1px; left: -1px;
+      width: 12px; height: 12px;
+      border-top: 2px solid var(--pine-dark);
+      border-left: 2px solid var(--pine-dark);
+    }
+
+    .blueprint-card::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; right: -1px;
+      width: 12px; height: 12px;
+      border-bottom: 2px solid var(--pine-dark);
+      border-right: 2px solid var(--pine-dark);
+    }
+
+    /* Typography inside content */
+    p {
+      margin-bottom: 1.25rem;
+      color: var(--charcoal);
+      font-size: 1rem;
+    }
+
+    p strong {
+      color: var(--pine-dark);
+    }
+
+    h3 {
+      font-family: var(--font-header);
+      font-size: 1.35rem;
+      color: var(--pine-dark);
+      margin: 2rem 0 1rem 0;
+      text-transform: uppercase;
+      letter-spacing: -0.01em;
+      border-bottom: 1px dashed var(--pine-dark);
+      padding-bottom: 0.25rem;
+    }
+
+    ul, ol {
+      margin-bottom: 1.5rem;
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    li strong {
+      color: var(--pine-dark);
+    }
+
+    hr {
+      border: 0;
+      border-top: 1px dashed var(--pine-dark);
+      margin: 3rem 0;
+      opacity: 0.3;
+    }
+
+    /* Tables styled with dense, crisp green headers */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      margin: 1.5rem 0;
+      border: 1px solid var(--glass-border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--pine-dark);
+      color: var(--paper-white);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.75rem 1rem;
+      font-weight: 500;
+    }
+
+    td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(11, 61, 41, 0.1);
+      background: rgba(255, 255, 255, 0.4);
+      color: var(--charcoal);
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: rgba(11, 61, 41, 0.02);
+    }
+
+    tr:hover td {
+      background: rgba(11, 61, 41, 0.05);
+    }
+
+    /* Monospace schema & codes */
+    code, pre {
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+    }
+
+    code {
+      background-color: rgba(18, 76, 56, 0.08);
+      color: var(--pine-dark);
+      padding: 0.15rem 0.35rem;
+      border-radius: 3px;
+    }
+
+    /* Mermaid diagrams full-width container styling */
+    .diagram-container {
+      width: 100%;
+      overflow-x: auto;
+      background: #fbfaf7;
+      border: 1px dashed var(--pine-dark);
+      padding: 1.5rem;
+      margin: 2rem 0;
+      border-radius: 4px;
+      box-shadow: inset 0 0 12px rgba(11, 61, 41, 0.03);
+    }
+
+    .mermaid {
+      background-color: transparent !important;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* Custom hyperlink overrides */
+    a.blueprint-link {
+      color: var(--pine-mid);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      transition: color 0.2s ease;
+    }
+
+    a.blueprint-link:hover {
+      color: var(--charcoal);
+      background-color: var(--pine-light);
+    }
+
+    /* Grid Layout for dashboard feel in some spots */
+    .spec-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 900px) {
+      .spec-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Dark Footer Strip */
+    footer {
+      background-color: var(--pine-dark);
+      color: rgba(255, 255, 255, 0.7);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 2rem 5%;
+      margin-top: 6rem;
+      border-top: 3px double var(--paper-grid);
+    }
+
+    /* Subtle interaction effects */
+    .blueprint-card, table, .diagram-container, .plate-title-block {
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .blueprint-card:hover {
+      box-shadow: 0 8px 24px rgba(11, 61, 41, 0.05);
+    }
+
+  </style>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+.ha-img-placeholder{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:6px;background:#f4f4f5;border:1px dashed #d4d4d8;border-radius:8px;color:#71717a;font-size:12px;font-family:system-ui,sans-serif;min-height:80px;padding:16px;box-sizing:border-box;animation:ha-img-pulse 1.5s ease-in-out infinite}
+.ha-img-placeholder.ha-failed{animation:none;opacity:.7}
+@keyframes ha-img-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media(prefers-color-scheme:dark){.ha-img-placeholder{background:#27272a;border-color:#3f3f46;color:#a1a1aa}}
+</style>
+</head>
+<body>
+
+  <!-- Sticky Top Navigation -->
+  <nav class="sticky-bar">
+    <a href="#" class="sticky-bar-brand">SAWAARI // MASTER DRAWINGS</a>
+    <div class="sticky-nav">
+      <a href="#plate-00">P00</a>
+      <a href="#plate-01">P01</a>
+      <a href="#plate-02">P02</a>
+      <a href="#plate-03">P03</a>
+      <a href="#plate-04">P04</a>
+      <a href="#plate-05">P05</a>
+      <a href="#plate-06">P06</a>
+      <a href="#plate-07">P07</a>
+      <a href="#plate-08">P08</a>
+      <a href="#plate-09">P09</a>
+      <a href="#plate-10">P10</a>
+      <a href="#plate-11">P11</a>
+      <a href="#plate-12">P12</a>
+    </div>
+  </nav>
+
+  <!-- Content Workspace Container -->
+  <div class="content-container">
+
+    <!-- Master Header Block -->
+    <header class="master-header">
+      <h1>SAWAARI — FULL SYSTEM ARCHITECTURE BLUEPRINT</h1>
+      <p>Delhi multimodal fare-comparison + one-tap booking ecosystem · Master engineering drawings · Sheet set v1.0 · July 2026</p>
+    </header>
+
+    <!-- Project Introductory Context Statement -->
+    <div class="blueprint-card" style="margin-bottom: 4rem;">
+      <p style="font-size: 1.1rem; line-height: 1.7; margin-bottom: 0;">
+        Every component below is real, named, and licensed. Estimates are labeled as estimates. Integration constraints are stated as they exist today, verified against 2025–26 sources.
+      </p>
+    </div>
+
+    <!-- PLATE 00 -->
+    <section id="plate-00">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 00</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>SCOPE LOCK: YOUR SEVEN NEEDS, MAPPED</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: NTS<br>
+          DWG NO: P00-SLM
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <p>Your board (left column → right column) drives this entire sheet set. Two notation reads: "litflit" reads as <strong>Leaflet</strong> (the open-source map library) and "naavik" reads as <strong>NavIC</strong> (ISRO's regional satellite navigation constellation — a positioning signal, placed in the location stack where it truthfully belongs).</p>
+        
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Your need</th>
+                <th>Your mapped ask</th>
+                <th>Where it lives</th>
+                <th>Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>1</td>
+                <td>Competition prices</td>
+                <td>redbus / abhibus / uber / rapido / ola / trains</td>
+                <td>PLATE 06 — Provider Adapter Matrix + PLATE 04 Fare Engine</td>
+                <td>Own estimate models for app-cabs (their ToS bans price-API comparison); slab law for bus/metro; affiliate + partner rails for intercity and trains</td>
+              </tr>
+              <tr>
+                <td>2</td>
+                <td>Fares by chosen route</td>
+                <td>fare according to the route the user chose</td>
+                <td>PLATE 05 — Compare pipeline</td>
+                <td>Valhalla prices the road per vehicle profile; OTP2 plans the transit legs; the Fare Engine prices every mode on that exact route</td>
+              </tr>
+              <tr>
+                <td>3</td>
+                <td>Map</td>
+                <td>google / Leaflet / microsoft / NavIC</td>
+                <td>PLATE 02 — Maps matrix</td>
+                <td>MapLibre GL as default renderer, Google or Azure tiles where budget allows, Leaflet as the low-end fallback</td>
+              </tr>
+              <tr>
+                <td>4</td>
+                <td>Location</td>
+                <td>GPS location (Google)</td>
+                <td>PLATE 02 — Positioning stack</td>
+                <td>Fused Location Provider blends GPS + NavIC + cell + Wi-Fi; NavIC L5 support ships in most current Indian Android chipsets</td>
+              </tr>
+              <tr>
+                <td>5</td>
+                <td>Automation</td>
+                <td>MCPs, SDKs, WhatsApp / Telegram</td>
+                <td>PLATE 09 — Automation plane</td>
+                <td>WhatsApp Business Cloud API + Telegram Bot API + a first-party MCP server exposing compare/book tools to AI agents</td>
+              </tr>
+              <tr>
+                <td>6</td>
+                <td>Comparison</td>
+                <td>final data on dashboard</td>
+                <td>PLATE 02/03/05 — Client dashboard + BFF</td>
+                <td>Ranked cards with cheapest / fastest / smart badges, live ETAs, per-platform reliability scores</td>
+              </tr>
+              <tr>
+                <td>7</td>
+                <td>Digitalization</td>
+                <td>wallet, ticket download, documents</td>
+                <td>PLATE 08 — Wallet &amp; Ticket Vault</td>
+                <td>UPI payments, QR ticket vault, PDF export, document locker, Saheli-card awareness</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATE 01 -->
+    <section id="plate-01">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 01</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>SYSTEM OVERVIEW</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: MULTI-MODAL<br>
+          DWG NO: P01-SYS
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart TB
+  subgraph C["CLIENT LAYER"]
+    A1["Flutter app<br/>offline-first"]
+    A2["Next.js web + PWA"]
+    A3["WhatsApp bot"]
+    A4["Telegram bot"]
+  end
+  subgraph E["EDGE"]
+    E1["Cloudflare CDN + WAF"]
+    E2["Kong API Gateway<br/>auth · rate limits"]
+    E3["GraphQL / REST BFF"]
+  end
+  subgraph S["CORE SERVICES"]
+    S1["Comparison<br/>Orchestrator"]
+    S2["Geocoding<br/>Photon + gazetteer"]
+    S3["Road Routing<br/>Valhalla"]
+    S4["Transit Planner<br/>OTP2"]
+    S5["Fare Engine<br/>versioned tariffs"]
+    S6["Provider Adapters"]
+    S7["Booking + Handoff<br/>deeplinks · ONDC BAP"]
+    S8["Realtime ETA<br/>GTFS-RT + H3"]
+    S9["Wallet + Tickets"]
+    S10["Notifications"]
+    S11["Users + Trips"]
+  end
+  subgraph D["DATA PLATFORM"]
+    D1[("Postgres + PostGIS")]
+    D2[("Valkey cache")]
+    D3[["Kafka event bus"]]
+    D4[("ClickHouse analytics")]
+    D5[("S3 object store")]
+  end
+  subgraph X["EXTERNAL RAILS"]
+    X1["OTD GTFS static + realtime"]
+    X2["ONDC / Beckn network"]
+    X3["Uber · Ola deeplinks"]
+    X4["UPI payment gateway"]
+    X5["Google / Ola Maps APIs"]
+    X6["WhatsApp Cloud API"]
+  end
+  C --> E1 --> E2 --> E3
+  E3 --> S1
+  S1 --> S2
+  S1 --> S3
+  S1 --> S4
+  S1 --> S5
+  S1 --> S6 --> S7
+  S7 --> X2
+  S7 --> X3
+  S8 --> X1
+  S9 --> X4
+  S10 --> X6
+  S2 --> X5
+  S1 --> D2
+  S5 --> D1
+  S8 --> D3
+  S11 --> D1
+  D3 --> D4
+  S9 --> D5
+          </pre>
+        </div>
+        <p><strong>Component inventory (13 blocks, 4 planes):</strong> four client surfaces, one edge plane, eleven core services, five data stores, six external rails. Every service ships as a container; the whole system runs on one beefy VPS at v0 and spreads across Kubernetes at v1+.</p>
+      </div>
+    </section>
+
+    <!-- PLATE 02 -->
+    <section id="plate-02">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 02</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>CLIENT LAYER</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: MULTI-DEVICE<br>
+          DWG NO: P02-CLI
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <h3>App architecture</h3>
+        <ul>
+          <li><strong>Flutter</strong> (single codebase → Android + iOS; Android ships first — Delhi commuters are ~95% Android). State: Riverpod. Local store: <strong>SQLite (drift)</strong> carrying a bundled GTFS extract, the tariff tables, and the last 30 days of trips.</li>
+          <li><strong>Next.js web + PWA</strong> for desktop/search-engine surface and instant sharing of comparison links.</li>
+          <li><strong>Offline-first doctrine (the Where Is My Train lesson):</strong> the app answers with zero bars. Bundled GTFS + tariffs compute bus/metro/meter fares fully on-device; app-cab estimates degrade to "last-known surge" with a stale badge; live ETAs resume on reconnect. Booking actions queue and fire when the network returns.</li>
+        </ul>
+
+        <h3>Maps matrix (need #3)</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Layer</th>
+                <th>Default pick</th>
+                <th>Alternates</th>
+                <th>Truth notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Renderer</td>
+                <td><strong>MapLibre GL</strong> (BSD-3, vector, GPU)</td>
+                <td><strong>Leaflet</strong> (raster, ~42KB) for low-end devices</td>
+                <td>Both open-source; zero vendor lock-in</td>
+              </tr>
+              <tr>
+                <td>Tiles/data</td>
+                <td>Self-hosted OSM vector tiles (Planetiler build, Delhi extract)</td>
+                <td><strong>Google Maps Platform</strong> (best Delhi traffic), <strong>Azure Maps</strong> (Microsoft), <strong>Ola Maps</strong> (INR pricing, OSM-based), <strong>Mappls/MapmyIndia</strong> (deep India POIs)</td>
+                <td>Self-hosted tiles cost ~₹2k/mo; Google tiles bill per-load — use only where traffic ETAs justify it</td>
+              </tr>
+              <tr>
+                <td>Traffic ETA</td>
+                <td>Valhalla + historical speed profiles from our own GTFS-RT history</td>
+                <td>Google Routes API as paid precision upgrade</td>
+                <td>Ola swapped Google for in-house maps and cut a reported ~₹100 crore/yr — same playbook</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Positioning stack (need #4)</h3>
+        <ul>
+          <li><strong>Android:</strong> Fused Location Provider — blends GPS, <strong>NavIC</strong> (L5 band; supported on most current Snapdragon/MediaTek Indian handsets), GLONASS, cell towers, Wi-Fi. NavIC needs zero extra code; the chipset contributes it to the fix.</li>
+          <li><strong>iOS:</strong> CoreLocation.</li>
+          <li><strong>Offline/degraded:</strong> cell-tower coarse fix + "pick a landmark" gazetteer fallback (our 40-place Delhi gazetteer from the prototype scales to ~2,000 landmarks).</li>
+        </ul>
+
+        <h3>Dashboard (need #6)</h3>
+        <p>Ranked comparison cards (fare, ETA, badges: CHEAPEST / FASTEST / SMART PICK / ₹0 SAHELI), expandable fare breakdowns, per-platform reliability score (cancellation odds per corridor — the 82%-cancellation wound turned into a feature), live bus positions on map, next-departure rail for stops.</p>
+      </div>
+    </section>
+
+    <!-- PLATE 03 -->
+    <section id="plate-03">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 03</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>EDGE & API</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: GLOBAL GATEWAY<br>
+          DWG NO: P03-EDG
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Block</th>
+                <th>Pick</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>CDN + WAF</td>
+                <td>Cloudflare (free → Pro)</td>
+                <td>Static assets, tile caching, DDoS shielding, bot rules</td>
+              </tr>
+              <tr>
+                <td>API Gateway</td>
+                <td><strong>Kong OSS</strong></td>
+                <td>API keys, JWT validation, per-IP + per-user rate limits, canary routing</td>
+              </tr>
+              <tr>
+                <td>BFF</td>
+                <td>Node.js (Fastify) GraphQL + REST</td>
+                <td>One round-trip per screen; shapes provider data for cards</td>
+              </tr>
+              <tr>
+                <td>Auth</td>
+                <td>Phone OTP (MSG91/Firebase Auth) → JWT + refresh</td>
+                <td>Aadhaar-free, DPDP-minimal PII: phone number + prefs only</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>API contract sketch</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Endpoint</th>
+                <th>Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>POST /v1/compare</code></td>
+                <td><code>{from, to, prefs{ac, saheli, night, surgeHint}}</code> → ranked options with breakdowns</td>
+              </tr>
+              <tr>
+                <td><code>GET /v1/stops/nearby?lat&amp;lng&amp;r</code></td>
+                <td>Stops + next departures (live where GTFS-RT covers)</td>
+              </tr>
+              <tr>
+                <td><code>GET /v1/routes/{no}</code></td>
+                <td>Route detail: stops, headway, first/last, fare slabs</td>
+              </tr>
+              <tr>
+                <td><code>GET /v1/live/route/{no}</code> (SSE)</td>
+                <td>Vehicle positions stream, 10s cadence</td>
+              </tr>
+              <tr>
+                <td><code>POST /v1/bookings</code></td>
+                <td><code>{optionId, rail: "ondc" or "deeplink"}</code> → booking state machine</td>
+              </tr>
+              <tr>
+                <td><code>GET /v1/wallet/tickets</code> · <code>GET /v1/wallet/tickets/{id}.pdf</code></td>
+                <td>Ticket vault + PDF export</td>
+              </tr>
+              <tr>
+                <td><code>POST /v1/alerts</code></td>
+                <td>Fare/disruption watchers</td>
+              </tr>
+              <tr>
+                <td><code>POST /v1/feedback/quote</code></td>
+                <td>Actual paid fare → trains the estimate models</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATE 04 -->
+    <section id="plate-04">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 04</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>CORE SERVICES (THE ELEVEN)</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: MICROSERVICES<br>
+          DWG NO: P04-COR
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Tech</th>
+                <th>What it does · scale notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Comparison Orchestrator</td>
+                <td>Go</td>
+                <td>Fans out geocode → routing → transit → fares; assembles ranked cards. Stateless, horizontally scaled</td>
+              </tr>
+              <tr>
+                <td>Geocoding</td>
+                <td><strong>Photon</strong> (search-as-you-type) + curated Delhi gazetteer + Google fallback</td>
+                <td>India OSM gap is real (61.6% pincode coverage) — gazetteer-first design absorbs it</td>
+              </tr>
+              <tr>
+                <td>Road Routing</td>
+                <td><strong>Valhalla</strong> (MIT)</td>
+                <td>One server, per-request costing: car, motorcycle (bike-taxi), auto profiles. Delhi OSM extract ≈ 2GB RAM</td>
+              </tr>
+              <tr>
+                <td>Transit Planner</td>
+                <td><strong>OpenTripPlanner 2</strong> (LGPL)</td>
+                <td>GTFS + OSM multimodal itineraries (bus, metro, walk legs). Delhi graph ≈ 4–6GB RAM, RAPTOR routing</td>
+              </tr>
+              <tr>
+                <td>Fare Engine</td>
+                <td>Go + versioned tariff tables in Postgres</td>
+                <td>Notified tariffs (auto Jan-2023 law, metro Aug-2025 slabs, bus slabs, DEVI flat) + estimate models (Uber/Ola/Rapido) + surge factor + Saheli gate (Aug 1, 2026 cutover) — every number editable, every tariff versioned with <code>effective_from</code></td>
+              </tr>
+              <tr>
+                <td>Provider Adapters</td>
+                <td>Node.js, one module per provider</td>
+                <td>Uniform <code>quote()</code> / <code>handoff()</code> / <code>book()</code> interface — full truth table on PLATE 06</td>
+              </tr>
+              <tr>
+                <td>Booking + Handoff</td>
+                <td>Node.js — <strong>ONDC BAP</strong> (Beckn protocol client) + deeplink builder</td>
+                <td>v1 hands off via deeplinks; v2 books natively on ONDC (autos, cabs, metro QR)</td>
+              </tr>
+              <tr>
+                <td>Realtime ETA</td>
+                <td>Rust consumer</td>
+                <td>Parses <code>VehiclePositions.pb</code> (10s poll), H3-indexes positions, computes stop-level ETAs, writes hot cache + history</td>
+              </tr>
+              <tr>
+                <td>Wallet + Tickets</td>
+                <td>Node.js</td>
+                <td>UPI via PG, QR vault, PDF renderer (Playwright), document locker</td>
+              </tr>
+              <tr>
+                <td>Notifications</td>
+                <td>Node.js</td>
+                <td>FCM push, WhatsApp templates, Telegram messages, alert fan-out</td>
+              </tr>
+              <tr>
+                <td>Users + Trips</td>
+                <td>Node.js</td>
+                <td>Profiles, prefs (Saheli flag, AC preference), trip history, saved places</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATE 05 -->
+    <section id="plate-05">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 05</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>THE COMPARE FLOW</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: LATENCY CONTROL<br>
+          DWG NO: P05-CMP
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <div class="diagram-container">
+          <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as Flutter App
+  participant G as BFF Gateway
+  participant O as Orchestrator
+  participant GE as Geocoding
+  participant V as Valhalla
+  participant T as OTP2
+  participant F as Fare Engine
+  U->>G: POST /v1/compare {from, to, prefs}
+  G->>O: CompareTrip(cmd)
+  O->>GE: resolve endpoints (Valkey hit ~90%)
+  GE-->>O: lat/lng pair
+  par road profiles + transit plan
+    O->>V: cost car / auto / bike on this route
+    V-->>O: km + ETA per profile
+    O->>T: plan bus + metro itineraries
+    T-->>O: legs, transfers, headways
+  end
+  O->>F: price 10+ modes on the chosen route
+  F-->>O: fares with line-item breakdowns
+  O-->>G: ranked cards (cheapest / fastest / smart)
+  G-->>U: JSON, P95 under 1.2s
+          </pre>
+        </div>
+
+        <div class="spec-grid">
+          <div>
+            <h3>Latency budget (cold path)</h3>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Stage</th>
+                    <th>Budget</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Geocode (gazetteer/cache)</td>
+                    <td>5–60 ms</td>
+                  </tr>
+                  <tr>
+                    <td>Valhalla, 3 profiles parallel</td>
+                    <td>40–90 ms</td>
+                  </tr>
+                  <tr>
+                    <td>OTP2 itinerary plan</td>
+                    <td>150–400 ms</td>
+                  </tr>
+                  <tr>
+                    <td>Fare engine, all modes</td>
+                    <td>5–15 ms</td>
+                  </tr>
+                  <tr>
+                    <td>Ranking + BFF assembly</td>
+                    <td>35 ms</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Total target</strong></td>
+                    <td><strong>≤ 1.2s P95 cold · ≤ 450ms warm</strong></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div>
+            <h3>Ranking math</h3>
+            <p style="margin-top: 1rem;"><code>score = 0.55 × (fare / max_fare) + 0.45 × (eta / max_eta)</code> — lowest score wins SMART PICK.</p>
+            <p>Weights live in config; reliability score (per-provider cancellation history on that corridor) renders beside every app-cab card.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATE 06 -->
+    <section id="plate-06">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 06</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>PROVIDER ADAPTER MATRIX</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: LIVE RAILS<br>
+          DWG NO: P06-PAM
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Provider</th>
+                <th>Prices come from</th>
+                <th>Booking rail</th>
+                <th>Honest status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Uber</strong> (Go/Moto/Auto)</td>
+                <td>Our estimate model (base + /km + /min × surge), tuned by user fare feedback</td>
+                <td>Universal link <code>m.uber.com/ul/?action=setPickup&amp;pickup[latitude]=…&amp;dropoff[latitude]=…</code> with prefill</td>
+                <td>Public fare API: closed; ToS bans price-comparison use. Deeplink prefill has a known intermittent bug — test per release</td>
+              </tr>
+              <tr>
+                <td><strong>Ola</strong> (Mini/Auto/Bike)</td>
+                <td>Our estimate model</td>
+                <td><code>book.olacabs.com/?lat=…&amp;drop_lat=…&amp;category=…&amp;utm_source=&lt;affiliate-id&gt;</code> — utm_source is mandatory; full Booking API exists behind partner approval</td>
+                <td>Affiliate signup is the v1 move; partner API the v2 upgrade</td>
+              </tr>
+              <tr>
+                <td><strong>Rapido</strong> (bike/auto/cab)</td>
+                <td>Our estimate model</td>
+                <td>App-open only — zero public deeplink exists</td>
+                <td>The gap is real; ONDC pressure is the long-term answer</td>
+              </tr>
+              <tr>
+                <td><strong>Namma Yatri / Yatri</strong> (auto/cab)</td>
+                <td>Driver-set near meter, ₹0 commission</td>
+                <td><strong>ONDC/Beckn — natively bookable</strong> (live in Delhi since Jan 2024)</td>
+                <td>The open rail; AGPL reference code exists</td>
+              </tr>
+              <tr>
+                <td><strong>DMRC Metro</strong></td>
+                <td>Aug-2025 slab law (₹11–64), computed locally</td>
+                <td><strong>ONDC QR tickets</strong> (10+ buyer apps already sell them) + WhatsApp <a href="https://wa.me/919650855800" target="_blank" rel="noopener noreferrer" class="blueprint-link">+91 96508 55800</a></td>
+                <td>Proven rail — Uber itself sells Delhi Metro QR via ONDC since May 2025</td>
+              </tr>
+              <tr>
+                <td><strong>DTC / DIMTS bus</strong></td>
+                <td>Slab law (₹5–15 / ₹10–25) + Saheli gate, computed locally</td>
+                <td>One Delhi QR (10% in-app discount) · Chartr · ONDC bus ticketing (rolling out since Sep 2024)</td>
+                <td>GTFS gives inventory; ONDC gives ticketing</td>
+              </tr>
+              <tr>
+                <td><strong>Meter auto / kaali-peeli</strong></td>
+                <td>Jan-2023 notified tariff, computed locally</td>
+                <td>Street hail — no rail</td>
+                <td>Surface as the negotiation anchor with a meter-refusal disclaimer</td>
+              </tr>
+              <tr>
+                <td><strong>Redbus</strong> (intercity)</td>
+                <td>redBus affiliate/B2B inventory API (partner program)</td>
+                <td>Affiliate handoff → partner API</td>
+                <td>Partnership required — standard affiliate onboarding</td>
+              </tr>
+              <tr>
+                <td><strong>AbhiBus</strong> (intercity)</td>
+                <td>Abhibus/ixigo affiliate program</td>
+                <td>Affiliate handoff</td>
+                <td>Partnership required</td>
+              </tr>
+              <tr>
+                <td><strong>Indian Railways</strong> (trains)</td>
+                <td>Open timetable data + NTES live status</td>
+                <td><strong>IRCTC booking requires an authorized partner license</strong> (the ixigo/ConfirmTkt path); unreserved UTS has no public API</td>
+                <td>Phase-3 item; state it plainly to users until licensed</td>
+              </tr>
+              <tr>
+                <td><strong>E-rickshaw</strong></td>
+                <td>Observed hop range ₹10–30</td>
+                <td>Street hail</td>
+                <td>Last-mile card only</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLATE 07 -->
+    <section id="plate-07">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 07</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>DATA PLATFORM</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: PETABYTE CAPABLE<br>
+          DWG NO: P07-DAT
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <h3>Stores</h3>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Store</th>
+                <th>Pick</th>
+                <th>Holds</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>OLTP + geo</td>
+                <td><strong>PostgreSQL 16 + PostGIS</strong></td>
+                <td>Users, trips, quotes, bookings, tariff versions, GTFS imports</td>
+              </tr>
+              <tr>
+                <td>Hot cache</td>
+                <td><strong>Valkey</strong> (BSD Redis fork)</td>
+                <td>Geocode cache, live ETAs (TTL 30s), session, rate counters</td>
+              </tr>
+              <tr>
+                <td>Event bus</td>
+                <td><strong>Kafka</strong> (or Redpanda single-node at v0)</td>
+                <td><code>bus.positions</code> · <code>quotes.issued</code> · <code>quotes.feedback</code> · <code>bookings.state</code> · <code>alerts.fired</code> · <code>tariffs.changed</code></td>
+              </tr>
+              <tr>
+                <td>Analytics</td>
+                <td><strong>ClickHouse</strong></td>
+                <td>Position history, reliability scores, quote-vs-actual deltas, corridor demand</td>
+              </tr>
+              <tr>
+                <td>Objects</td>
+                <td>S3-compatible (R2/MinIO)</td>
+                <td>Ticket PDFs, QR payloads, GTFS archives</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>GTFS ingestion pipeline (need #1 bus data, live)</h3>
+        <div class="diagram-container">
+          <pre class="mermaid">
+flowchart LR
+  A["OTD portal<br/>GTFS static zip"] -->|"nightly pull · Dagster"| B["Validate<br/>gtfs-kit"]
+  B --> C[("PostGIS<br/>routes · stops · trips")]
+  C --> D["OTP2 graph build<br/>+ OSM Delhi extract"]
+  D --> E["OTP2 servers<br/>blue-green swap"]
+  F["VehiclePositions.pb<br/>poll every 10s"] --> G["gtfs-realtime-bindings<br/>parser"]
+  G --> H[["Kafka: bus.positions"]]
+  H --> I["H3 indexer<br/>stop-ETA computer"]
+  I --> J[("Valkey<br/>hot ETAs · TTL 30s")]
+  H --> K[("ClickHouse<br/>history · reliability")]
+          </pre>
+        </div>
+        <p>Register properly on <a href="https://otd.delhi.gov.in" target="_blank" rel="noopener noreferrer" class="blueprint-link">otd.delhi.gov.in</a> for the realtime key (form asks org, purpose, usage type). The portal's own warning stands: static stop_times are constant-speed estimates — <strong>our ETAs come from live positions + our accumulated speed history</strong>, never from the static file.</p>
+
+        <h3>Schema sketch (core tables)</h3>
+        <p><code>users(id, phone, saheli_flag, prefs)</code> · <code>trips(id, user_id, from_geog, to_geog, ts)</code> · <code>quotes(id, trip_id, provider, mode, fare_min, fare_max, eta_s, surge, breakdown_json)</code> · <code>quote_feedback(quote_id, actual_fare, delta)</code> · <code>bookings(id, quote_id, rail, ondc_txn_id, status)</code> · <code>tickets(id, booking_id, qr_payload, pdf_key, valid_to, state)</code> · <code>tariffs(id, mode, version, effective_from, rules_json)</code> · <code>providers(id, kind, health, cancel_rate)</code> · <code>gtfs.*</code> (imported) · <code>alerts(id, user_id, kind, config)</code></p>
+        
+        <p>The <code>quote_feedback</code> loop is the moat: users report the fare they actually paid; nightly jobs re-fit the estimate models per corridor and time-of-day; quoted-vs-actual accuracy becomes a published, marketable number.</p>
+      </div>
+    </section>
+
+    <!-- PLATE 08 -->
+    <section id="plate-08">
+      <div class="plate-title-block">
+        <div class="plate-cell plate-cell-num">PLATE 08</div>
+        <div class="plate-cell plate-cell-title">
+          <h2>BOOKING, WALLET, TICKETS, DOCUMENTS</h2>
+        </div>
+        <div class="plate-cell plate-cell-meta">
+          SCALE: SECURE VAULT<br>
+          DWG NO: P08-BWT
+        </div>
+      </div>
+
+      <div class="blueprint-card">
+        <h3>ONDC booking flow (v2 — the native rail)</h3>
+        <div class="diagram-container">
+          <pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant U as App
+  participant B as Booking Svc (our BAP)
+  participant GW as ONDC Gateway
+  participant P as BPP (Yatri driver network / DMRC seller app)
+  U->&gt;B: book(selected option)
+  B->&gt;GW: /search (Beckn intent)
+  GW->&gt;P: broadcast to providers
+  P--&gt;&gt;B: /on_search (catalog + live quote)
+  B->&gt;P: /select then /init (fulfilment + billing)
+  P--&gt;&gt;B: /on_init (payment terms)
+  B->&gt;U: collect UPI payment
+  U--&gt;&gt;
