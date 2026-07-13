@@ -1,0 +1,87 @@
+# Valhalla Routing Engine Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valhalla
+  namespace: sawaari
+  labels:
+    app: valhalla
+    tier: routing
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: valhalla
+  template:
+    metadata:
+      labels:
+        app: valhalla
+        tier: routing
+    spec:
+      containers:
+        - name: valhalla
+          image: sawaari/valhalla:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8002
+              name: api
+          env:
+            - name: SERVICE_PORT
+              value: "8002"
+            - name: JVM_ARGS
+              value: "-Xmx2g"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          volumeMounts:
+            - name: valhalla-data
+              mountPath: /valhalla/data
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: valhalla-data
+          persistentVolumeClaim:
+            claimName: valhalla-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valhalla
+  namespace: sawaari
+  labels:
+    app: valhalla
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8002
+      targetPort: 8002
+      protocol: TCP
+  selector:
+    app: valhalla
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: valhalla-data-pvc
+  namespace: sawaari
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 15Gi

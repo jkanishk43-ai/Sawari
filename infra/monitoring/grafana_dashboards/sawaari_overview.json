@@ -1,0 +1,98 @@
+{
+  "title": "Sawaari — System Overview",
+  "uid": "sawaari-overview",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["sawaari", "production"],
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Compare Requests / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        { "expr": "rate(http_requests_total{path=\"/v1/compare\"}[5m]) * 60", "legendFormat": "RPM" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqpm",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 1000 },
+            { "color": "red", "value": 5000 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "P95 Latency (cold path)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{path=\"/v1/compare\"}[5m]))", "legendFormat": "P95" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.8 },
+            { "color": "red", "value": 1.2 }
+          ]}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Geocode Cache Hit Rate",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        { "expr": "rate(cache_hit_total[5m]) / (rate(cache_hit_total[5m]) + rate(cache_miss_total[5m]))" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 4,
+      "title": "Kafka Bus.positions lag",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "targets": [
+        { "expr": "kafka_consumer_lag{topic=\"bus.positions\"}", "legendFormat": "lag" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Active providers",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        { "expr": "count by (provider) (provider_quotes_total{status=\"ok\"})" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Quote → Actual fare delta (₹)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        { "expr": "avg(quote_actual_delta) by (provider)", "legendFormat": "{{provider}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Bookings by rail",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        { "expr": "rate(bookings_total[5m]) * 60", "legendFormat": "{{rail}}" }
+      ]
+    }
+  ],
+  "templating": { "list": [] }
+}

@@ -1,0 +1,105 @@
+# Kong API Gateway Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kong
+  namespace: sawaari
+  labels:
+    app: kong
+    tier: gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kong
+  template:
+    metadata:
+      labels:
+        app: kong
+        tier: gateway
+    spec:
+      containers:
+        - name: kong
+          image: kong:3.6
+          env:
+            - name: KONG_DATABASE
+              value: postgres
+            - name: KONG_PG_HOST
+              value: postgres.sawaari.svc.cluster.local
+            - name: KONG_PG_PORT
+              value: "5432"
+            - name: KONG_PG_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-secrets
+                  key: postgres-user
+            - name: KONG_PG_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sawaari-secrets
+                  key: postgres-password
+            - name: KONG_PG_DB
+              value: kong
+            - name: KONG_PROXY_ACCESS_LOG
+              value: /dev/stdout
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: /dev/stdout
+            - name: KONG_DECLARATIVE_CONFIG
+              value: /usr/local/kong/declarative.yml
+          ports:
+            - containerPort: 8000
+              name: proxy-http
+            - containerPort: 8443
+              name: proxy-https
+            - containerPort: 8001
+              name: admin-http
+            - containerPort: 8444
+              name: admin-https
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-declarative-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kong
+  namespace: sawaari
+  labels:
+    app: kong
+spec:
+  type: ClusterIP
+  ports:
+    - name: proxy-http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+    - name: proxy-https
+      port: 8443
+      targetPort: 8443
+      protocol: TCP
+    - name: admin-http
+      port: 8001
+      targetPort: 8001
+      protocol: TCP
+  selector:
+    app: kong

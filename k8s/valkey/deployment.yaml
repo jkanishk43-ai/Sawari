@@ -1,0 +1,88 @@
+# Valkey (Redis fork) Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valkey
+  namespace: sawaari
+  labels:
+    app: valkey
+    tier: cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: valkey
+  template:
+    metadata:
+      labels:
+        app: valkey
+        tier: cache
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:8.0
+          ports:
+            - containerPort: 6379
+              name: valkey
+          args:
+            - valkey-server
+            - --maxmemory
+            - "512mb"
+            - --maxmemory-policy
+            - allkeys-lru
+            - --appendonly
+            - "yes"
+            - --appendfsync
+            - everysec
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          volumeMounts:
+            - name: valkey-data
+              mountPath: /data
+          livenessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: valkey-data
+          persistentVolumeClaim:
+            claimName: valkey-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: valkey
+  namespace: sawaari
+  labels:
+    app: valkey
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+  selector:
+    app: valkey
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: valkey-pvc
+  namespace: sawaari
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

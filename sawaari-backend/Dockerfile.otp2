@@ -1,0 +1,95 @@
+# ============================================
+# OTP2 - OpenTripPlanner with Delhi GTFS
+# ============================================
+# OTP2 requires Java 17+
+FROM eclipse-temurin:17-jdk-alpine AS builder
+
+# Install build tools
+RUN apk add --no-cache \
+    wget \
+    unzip \
+    curl
+
+# OTP2 Version
+ARG OTP_VERSION=2.5.0
+ARG GRAPH_BUILD_TIMEOUT=3600
+
+# Create OTP directory
+WORKDIR /otp
+
+# Download OTP2 JAR
+RUN wget -q https://repo1.maven.org/maven2/org/opentripplanner/otp/${OTP_VERSION}/otp-${OTP_VERSION}.jar \
+    -O otp.jar
+
+# ============================================
+# Runtime stage with pre-built graph
+# ============================================
+FROM eclipse-temurin:17-jre-alpine AS runtime
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    wget \
+    unzip \
+    ca-certificates \
+    tzdata
+
+# Create OTP directories
+WORKDIR /var/otp
+RUN mkdir -p /var/otp/graphs /var/otp/deploy /var/otp/logs
+
+# Copy OTP JAR
+COPY --from=builder /otp/otp.jar /var/otp/otp.jar
+
+# Environment variables
+ENV OTP_GRAPH_DIR=/var/otp/graphs
+ENV OTP_PORT=8080
+ENV JAVA_OPTS="-Xmx6g -Xms2g -server -XX:+UseG1GC -XX:MaxGCPauseMillis=500"
+ENV GRAPH_BUILD_TIMEOUT=3600
+
+# Expose OTP port
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=30s --start-period=120s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/otp/ || exit 1
+
+# Entry point script
+COPY <<'EOF' /entrypoint.sh
+#!/bin/sh
+set -e
+
+GRAPHS_DIR="/var/otp/graphs"
+GRAPH_DIR="${GRAPHS_DIR}/delhi"
+
+echo "Starting OTP2 for Delhi NCR..."
+echo "Graph directory: ${GRAPH_DIR}"
+
+# Check if graph exists
+if [ ! -f "${GRAPH_DIR}/Graph.obj" ]; then
+    echo "No graph found at ${GRAPH_DIR}/Graph.obj"
+    echo "Please build the graph first using the build-graph.sh script"
+    echo "Starting OTP2 in build mode..."
+
+    # Start OTP2 which will wait for graph build
+    exec java ${JAVA_OPTS} \
+        -jar /var/otp/otp.jar \
+        --load ${GRAPHS_DIR} \
+        --port ${OTP_PORT} \
+        --serveVehicles
+else
+    echo "Graph found! Loading existing graph..."
+    exec java ${JAVA_OPTS} \
+        -jar /var/otp/otp.jar \
+        --load ${GRAPH_DIR} \
+        --port ${OTP_PORT} \
+        --serveVehicles
+fi
+EOF
+
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Build arguments:
+# OTP_VERSION=2.5.0 - OTP2 version from Maven Central

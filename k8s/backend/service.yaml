@@ -1,0 +1,96 @@
+# Sawaari Backend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sawaari-backend
+  namespace: sawaari
+  labels:
+    app: sawaari-backend
+    tier: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sawaari-backend
+  template:
+    metadata:
+      labels:
+        app: sawaari-backend
+        tier: backend
+    spec:
+      containers:
+        - name: backend
+          image: sawaari/sawaari-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: sawaari-backend-config
+            - secretRef:
+                name: sawaari-secrets
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: sawaari-backend-config
+                  key: database_url
+            - name: REDIS_URL
+              value: "redis://valkey:6379/0"
+            - name: KAFKA_BROKERS
+              value: "kafka:9092"
+            - name: OTP2_URL
+              value: "http://otp2:8080"
+            - name: VALHALLA_URL
+              value: "http://valhalla:8002"
+            - name: PHOTON_URL
+              value: "http://photon:2322"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - sawaari-backend
+                topologyKey: kubernetes.io/hostname
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sawaari-backend
+  namespace: sawaari
+  labels:
+    app: sawaari-backend
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: sawaari-backend

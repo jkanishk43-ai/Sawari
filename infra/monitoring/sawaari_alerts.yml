@@ -1,0 +1,68 @@
+groups:
+  - name: sawaari_api
+    interval: 30s
+    rules:
+      - alert: APILatencyHigh
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 1.2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Compare endpoint P95 above 1.2s budget"
+          description: "P95 = {{ $value }}s — PLATE 05 budget violated"
+
+      - alert: CacheMissHigh
+        expr: rate(cache_miss_total[5m]) / rate(cache_total[5m]) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Geocode cache miss rate above 50%"
+
+      - alert: KafkaLag
+        expr: kafka_consumer_lag_max > 1000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka consumer lag above 1000 on bus.positions"
+
+      - alert: ValkeyDown
+        expr: up{job="valkey"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Valkey cache unreachable"
+
+      - alert: PostgresConnections
+        expr: pg_stat_activity_count > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Postgres connections above 80 (max 100)"
+
+      - alert: OTP2Unavailable
+        expr: up{job="otp2"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OTP2 unreachable — bus/metro itineraries degraded"
+
+      - alert: ValhallaUnavailable
+        expr: up{job="valhalla"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Valhalla unreachable — road routing degraded"
+
+      - alert: GtfsRtPollFailures
+        expr: rate(gtfs_rt_poll_errors_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GTFS-RT poll error rate above 10%"

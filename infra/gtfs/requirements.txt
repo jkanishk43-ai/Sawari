@@ -1,0 +1,6 @@
+aiohttp==3.9.5
+asyncpg==0.29.0
+aiokafka==0.10.0
+gtfs-kit==6.1.0
+protobuf==4.25.3
+h3==4.1.0
